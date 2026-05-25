@@ -184,10 +184,10 @@ nav_items = [
     ("通知设置", "🔗"),
     ("关于", "ℹ️"),
     ("数据源管理", "🗄️"),
-    ("Fund Flow", "💰"),
-    ("Northbound Capital", "🧭"),
-    ("Dragon Tiger Board", "🐉"),
-    ("Industry Ranking", "🏭")
+    ("资金流向", "💰"),
+    ("北向资金", "🧭"),
+    ("龙虎榜", "🐉"),
+    ("行业排名", "🏭")
 ]
 
 st.sidebar.markdown("""
@@ -330,7 +330,7 @@ if page == "股票数据":
                 fig.update_layout(height=600, xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
 
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["数据表", "基本信息", "Fund Flow", "Concept Blocks", "Reports"])
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["数据表", "基本信息", "资金流向", "概念板块", "研报"])
                 with tab1:
                     st.dataframe(df2, use_container_width=True, hide_index=True)
                 with tab2:
@@ -346,7 +346,7 @@ if page == "股票数据":
                         ff_df = pd.DataFrame(ff_resp["data"])
                         st.dataframe(ff_df, use_container_width=True, hide_index=True)
                     else:
-                        st.info("No fund flow data available")
+                        st.info("暂无资金流向数据 available")
                 with tab4:
                     concept_resp = safe_api(f"/api/concept/{sel_code}")
                     if concept_resp and concept_resp.get("data"):
@@ -1505,17 +1505,17 @@ elif page == "数据源管理":
                 <p style="margin: 0;">⚠️ 未获取到数据源信息，请检查后端服务是否启动</p>
             </div>
             """, unsafe_allow_html=True)
-elif page == "Fund Flow":
+elif page == "资金流向":
     st.markdown("""
     <div class="custom-card">
-        <h3 style="margin: 0; color: #1e3a5f;">Fund Flow</h3>
+        <h3 style="margin: 0; color: #1e3a5f;">💰 资金流向</h3>
         <p style="color: #666; margin-top: 5px;">Analyze capital flow for individual stocks</p>
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        ff_code = st.text_input("Stock Code", value="600519", key="ff_code")
+        ff_code = st.text_input("股票代码", value="600519", key="ff_code")
         ff_mode = st.selectbox("Mode", ["minute", "daily"], key="ff_mode")
     with col2:
         if ff_code:
@@ -1532,18 +1532,18 @@ elif page == "Fund Flow":
                     total_main = ff_df["main_net"].sum()
                     total_large = ff_df["large_net"].sum() if "large_net" in ff_df.columns else 0
                     mcol1, mcol2 = st.columns(2)
-                    mcol1.metric("Total Main Net", f"{total_main:,.0f}")
-                    mcol2.metric("Total Large Net", f"{total_large:,.0f}")
+                    mcol1.metric("主力净流入", f"{total_main:,.0f}")
+                    mcol2.metric("大单净流入", f"{total_large:,.0f}")
 
                 if ff_mode == "minute" and "main_net" in ff_df.columns:
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(
                         x=ff_df["date"], y=ff_df["main_net"],
-                        mode="lines", name="Main Net",
+                        mode="lines", name="主力净流入",
                         line=dict(color="#3498db", width=2)
                     ))
                     fig.update_layout(
-                        title="Main Net Flow (Minute)",
+                        title="主力净流入（分时）",
                         xaxis_title="Time", yaxis_title="Amount",
                         height=500
                     )
@@ -1553,10 +1553,10 @@ elif page == "Fund Flow":
                     fig = go.Figure()
                     fig.add_trace(go.Bar(
                         x=ff_df["date"], y=ff_df["main_net"],
-                        name="Main Net", marker_color=colors
+                        name="主力净流入", marker_color=colors
                     ))
                     fig.update_layout(
-                        title="Main Net Flow (Daily - Last 30 Days)",
+                        title="主力净流入（近30日）",
                         xaxis_title="Date", yaxis_title="Amount",
                         height=500
                     )
@@ -1565,13 +1565,13 @@ elif page == "Fund Flow":
                 st.markdown("### Detail Data")
                 st.dataframe(ff_df, use_container_width=True, hide_index=True)
             else:
-                st.warning("No fund flow data available")
+                st.warning("暂无资金流向数据 available")
 
-elif page == "Northbound Capital":
+elif page == "北向资金":
     st.markdown("""
     <div class="custom-card">
-        <h3 style="margin: 0; color: #1e3a5f;">Northbound Capital</h3>
-        <p style="color: #666; margin-top: 5px;">Track northbound capital flow (HGT + SGT)</p>
+        <h3 style="margin: 0; color: #1e3a5f;">🧭 北向资金</h3>
+        <p style="color: #666; margin-top: 5px;">沪股通 + 深股通 实时资金流向</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1595,24 +1595,24 @@ elif page == "Northbound Capital":
         hgt_color = "#2ecc71" if hgt_latest >= 0 else "#e74c3c"
         sgt_color = "#2ecc71" if sgt_latest >= 0 else "#e74c3c"
         total_color = "#2ecc71" if total_latest >= 0 else "#e74c3c"
-        mcol1.metric("HGT Latest", f"{hgt_latest:,.2f} Yi")
-        mcol2.metric("SGT Latest", f"{sgt_latest:,.2f} Yi")
+        mcol1.metric("沪股通最新", f"{hgt_latest:,.2f} 亿")
+        mcol2.metric("深股通最新", f"{sgt_latest:,.2f} 亿")
         mcol3.metric("Total", f"{total_latest:,.2f} Yi")
 
         # Line chart with two traces
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=nb_df["date"], y=nb_df[hgt_col],
-            mode="lines", name="HGT (Shanghai)",
+            mode="lines", name="沪股通",
             line=dict(color="#2ecc71", width=2)
         ))
         fig.add_trace(go.Scatter(
             x=nb_df["date"], y=nb_df[sgt_col],
-            mode="lines", name="SGT (Shenzhen)",
+            mode="lines", name="深股通",
             line=dict(color="#3498db", width=2)
         ))
         fig.update_layout(
-            title="Northbound Capital Flow",
+            title="北向资金流向",
             xaxis_title="Date", yaxis_title="Amount (Yi)",
             height=500
         )
@@ -1623,17 +1623,17 @@ elif page == "Northbound Capital":
     else:
         st.warning("No northbound capital data available")
 
-elif page == "Dragon Tiger Board":
+elif page == "龙虎榜":
     st.markdown("""
     <div class="custom-card">
-        <h3 style="margin: 0; color: #1e3a5f;">Dragon Tiger Board</h3>
+        <h3 style="margin: 0; color: #1e3a5f;">🐉 龙虎榜</h3>
         <p style="color: #666; margin-top: 5px;">View dragon-tiger board data (top movers)</p>
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        dt_code = st.text_input("Stock Code (optional)", value="", key="dt_code")
+        dt_code = st.text_input("股票代码（可选）", value="", key="dt_code")
     with col2:
         dt_start = st.date_input("Start Date", key="dt_start")
     with col3:
@@ -1660,22 +1660,22 @@ elif page == "Dragon Tiger Board":
             net_color = "#2ecc71" if total_net >= 0 else "#e74c3c"
             st.markdown(f"""
             <div class="custom-card" style="border-left-color: {net_color};">
-                <h4 style="margin: 0;">Total Net Buy</h4>
+                <h4 style="margin: 0;">总净买入</h4>
                 <p style="margin: 5px 0 0 0; font-size: 1.5em; color: {net_color}; font-weight: bold;">
                     {total_net:,.0f}
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-        st.markdown("### Dragon Tiger Data")
+        st.markdown("### 龙虎榜数据")
         st.dataframe(dt_df, use_container_width=True, hide_index=True)
     else:
         st.warning("No dragon-tiger data available")
 
-elif page == "Industry Ranking":
+elif page == "行业排名":
     st.markdown("""
     <div class="custom-card">
-        <h3 style="margin: 0; color: #1e3a5f;">Industry Ranking</h3>
+        <h3 style="margin: 0; color: #1e3a5f;">🏭 行业排名</h3>
         <p style="color: #666; margin-top: 5px;">View industry sector rankings</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1697,13 +1697,13 @@ elif page == "Industry Ranking":
             with col_top:
                 st.markdown("### Top Industries")
                 for _, row in top_df.iterrows():
-                    leader = row.get("leader", row.get("leader_name", "N/A"))
+                    领涨股 = row.get("领涨股", row.get("领涨股_name", "N/A"))
                     st.markdown(f"""
                     <div class="custom-card" style="border-left-color: #2ecc71;">
                         <div style="display: flex; justify-content: space-between;">
                             <div>
                                 <h4 style="margin: 0;">{row.get('name', row.get('industry', 'N/A'))}</h4>
-                                <p style="margin: 3px 0 0 0; color: #666; font-size: 0.9em;">Leader: {leader}</p>
+                                <p style="margin: 3px 0 0 0; color: #666; font-size: 0.9em;">领涨股: {领涨股}</p>
                             </div>
                             <div style="color: #2ecc71; font-weight: bold; font-size: 1.2em;">
                                 +{row['change_pct']:.2f}%
@@ -1715,13 +1715,13 @@ elif page == "Industry Ranking":
             with col_bottom:
                 st.markdown("### Bottom Industries")
                 for _, row in bottom_df.iterrows():
-                    leader = row.get("leader", row.get("leader_name", "N/A"))
+                    领涨股 = row.get("领涨股", row.get("领涨股_name", "N/A"))
                     st.markdown(f"""
                     <div class="custom-card" style="border-left-color: #e74c3c;">
                         <div style="display: flex; justify-content: space-between;">
                             <div>
                                 <h4 style="margin: 0;">{row.get('name', row.get('industry', 'N/A'))}</h4>
-                                <p style="margin: 3px 0 0 0; color: #666; font-size: 0.9em;">Leader: {leader}</p>
+                                <p style="margin: 3px 0 0 0; color: #666; font-size: 0.9em;">领涨股: {领涨股}</p>
                             </div>
                             <div style="color: #e74c3c; font-weight: bold; font-size: 1.2em;">
                                 {row['change_pct']:.2f}%
