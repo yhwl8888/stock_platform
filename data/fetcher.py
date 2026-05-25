@@ -7,6 +7,7 @@ import concurrent.futures
 import pandas as pd
 
 from data.store import DataStore
+from data.market_utils import parse_code, is_index, get_full_code
 from data.generator import generate_stock_data, SAMPLE_STOCKS, generate_sample_data
 from data.sina_source import fetch_sina_daily, check_sina_network
 from data.eastmoney_source import fetch_eastmoney_daily, check_eastmoney_network
@@ -327,7 +328,15 @@ class DataFetcher:
     def fetch_index_daily(self, index_code: str = "000001",
                           start: str = DEFAULT_START_DATE, end: str = DEFAULT_END_DATE) -> pd.DataFrame:
         try:
-            df = ak.stock_zh_index_daily(symbol=f"sh{index_code}")
+            # Support prefixed codes like sh000001
+            if index_code.startswith(("sh", "sz")):
+                symbol = index_code
+            else:
+                symbol = get_full_code(index_code)
+                parsed = parse_code(index_code)
+                if parsed.get("type") != "index":
+                    symbol = f"sh{index_code}"
+            df = ak.stock_zh_index_daily(symbol=symbol)
             if not df.empty:
                 df = df.rename(columns={
                     "date": "date", "open": "open", "high": "high",
@@ -350,6 +359,20 @@ class DataFetcher:
             return pd.DataFrame()
         except Exception:
             return pd.DataFrame()
+
+
+    def get_stock_info(self, code: str) -> dict:
+        """Get stock info with market disambiguation."""
+        parsed = parse_code(code)
+        if parsed.get("ambiguous"):
+            return parsed
+        basic = self.store.get_basic()
+        if not basic.empty:
+            bare = parsed.get("code", code)
+            match = basic[basic["code"] == bare]
+            if not match.empty:
+                parsed["name"] = match.iloc[0].get("name", "")
+        return parsed
 
     def close(self):
         self.store.close()

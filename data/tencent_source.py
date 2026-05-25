@@ -7,18 +7,28 @@ from datetime import datetime
 
 TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q="
 
-INDEX_CODES = {"000001", "399001", "399006", "399005", "000300", "000016", "000010"}
-
 
 def _get_qcode(code: str) -> str:
-    """将股票代码转换为腾讯格式 (sh600519, sz000001)"""
-    code = code.strip().zfill(6)
-    
-    # 指数用原始交易所前缀
-    if code in INDEX_CODES or code.startswith("399") or code.startswith("00000"):
-        if code.startswith("399"):
-            return f"sz{code}"
-        return f"sh{code}"
+    """Convert stock/index code to Tencent format. Supports prefixed codes like sh000001, sz000001"""
+    code = code.strip().lower()
+    # Already prefixed
+    if code.startswith(("sh", "sz", "bj")) and len(code) == 8:
+        return code
+    # Bare code - use market_utils
+    bare = code.zfill(6)
+    try:
+        from data.market_utils import get_full_code
+        return get_full_code(bare)
+    except ImportError:
+        pass
+    # Fallback
+    if bare.startswith("6") or bare.startswith("5") or bare.startswith("9"):
+        return f"sh{bare}"
+    elif bare.startswith("0") or bare.startswith("3") or bare.startswith("1"):
+        return f"sz{bare}"
+    elif bare.startswith("8") or bare.startswith("4"):
+        return f"bj{bare}"
+    return f"sh{bare}"
     
     # 股票代码判断
     if code.startswith("6") or code.startswith("5") or code.startswith("9"):

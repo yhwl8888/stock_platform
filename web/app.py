@@ -224,6 +224,28 @@ def safe_api(url: str, method: str = "GET", data: dict = None, timeout: int = 60
         return {}
 
 
+def resolve_code_input(code_text):
+    """Parse user input codes, handling disambiguation for ambiguous codes like 000001"""
+    import re
+    codes = [c.strip().lower() for c in re.split(r'[,;\s]+', code_text) if c.strip()]
+    resolved = []
+    for c in codes:
+        if c.startswith(('sh', 'sz', 'bj')) and len(c) == 8:
+            resolved.append(c)
+            continue
+        info = safe_api(f'/api/code/{c}', timeout=5)
+        if info and info.get('ambiguous'):
+            for opt in info.get('options', []):
+                if opt['type'] == 'stock':
+                    resolved.append(opt['full_code'])
+                    break
+        elif info and info.get('info'):
+            resolved.append(info['info'].get('full_code', c))
+        else:
+            resolved.append(c)
+    return resolved
+
+
 if page == "股票数据":
     st.markdown("""
     <div class="custom-card">

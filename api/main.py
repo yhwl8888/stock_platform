@@ -807,6 +807,29 @@ def batch_backtest(req: CompareRequest):
     return {"results": results, "comparison_html": comparison_html}
 
 
+
+
+@app.get("/api/code/{code}")
+def resolve_code(code: str):
+    """Resolve a stock/index code with disambiguation info.
+    Input: bare code (000001) or prefixed (sh000001, sz000001)
+    Returns ambiguous options if code matches both index and stock."""
+    from data.market_utils import parse_code
+    info = parse_code(code)
+    if info.get("ambiguous"):
+        return {"ambiguous": True, "options": [
+            {"label": info["index"]["name"] + " (Index)", "full_code": info["index"]["full_code"], "type": "index"},
+            {"label": info["stock"]["name"] + " (Stock)", "full_code": info["stock"]["full_code"], "type": "stock"},
+        ]}
+    return {"ambiguous": False, "info": info}
+
+
+@app.get("/api/indexes")
+def list_indexes():
+    """List well-known index codes"""
+    from data.market_utils import INDEX_CODES
+    return {"data": [{"code": v["full"], "name": v["name"], "market": v["market"]} for v in INDEX_CODES.values()]}
+
 @app.on_event("shutdown")
 def shutdown():
     fetcher.close()
