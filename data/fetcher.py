@@ -8,6 +8,7 @@ import pandas as pd
 
 from data.store import DataStore
 from data.market_utils import parse_code, is_index, get_full_code
+from data.full_stock_list import FULL_STOCK_LIST
 from data.generator import generate_stock_data, SAMPLE_STOCKS, generate_sample_data
 from data.sina_source import fetch_sina_daily, check_sina_network
 from data.eastmoney_source import fetch_eastmoney_daily, check_eastmoney_network
@@ -178,16 +179,23 @@ class DataFetcher:
 
     def _build_local_stock_df(self):
         records = []
-        for code, name in SAMPLE_STOCKS:
+        for code, name in FULL_STOCK_LIST:
             records.append({
                 "code": code, "name": name, "industry": "",
-                "market": "sz" if code.startswith("0") or code.startswith("3") else "sh",
+                "market": "sz" if code.startswith(("0", "3")) else "sh",
                 "list_date": "20000101"
             })
         return pd.DataFrame(records)
 
     def _get_local_stock_list(self):
-        df = self._build_local_stock_df()
+        records = []
+        for code, name in FULL_STOCK_LIST:
+            records.append({
+                "code": code, "name": name, "industry": "",
+                "market": "sz" if code.startswith(("0", "3")) else "sh",
+                "list_date": "20000101"
+            })
+        df = pd.DataFrame(records)
         self.store.save_basic(df)
         return df
 
