@@ -261,7 +261,7 @@ if page == "股票数据":
     col1, col2 = st.columns([1, 3])
     with col1:
         st.markdown("##### 🔍 搜索股票")
-        keyword = st.text_input("search", placeholder="输入代码或名称...")
+        keyword = st.text_input("搜索", placeholder="输入代码或名称...")
         search_btn = st.button("🔍 搜索", use_container_width=True)
     with col2:
         st.markdown("##### 📋 股票列表")
@@ -353,14 +353,14 @@ if page == "股票数据":
                         concept_df = pd.DataFrame(concept_resp["data"])
                         st.dataframe(concept_df, use_container_width=True, hide_index=True)
                     else:
-                        st.info("No concept data available")
+                        st.info("暂无概念板块数据")
                 with tab5:
                     reports_resp = safe_api(f"/api/reports/{sel_code}")
                     if reports_resp and reports_resp.get("data"):
                         reports_df = pd.DataFrame(reports_resp["data"])
                         st.dataframe(reports_df, use_container_width=True, hide_index=True)
                     else:
-                        st.info("No reports data available")
+                        st.info("暂无研报数据")
     else:
         st.info("搜索或加载股票数据")
 
@@ -1597,7 +1597,7 @@ elif page == "北向资金":
         total_color = "#2ecc71" if total_latest >= 0 else "#e74c3c"
         mcol1.metric("沪股通最新", f"{hgt_latest:,.2f} 亿")
         mcol2.metric("深股通最新", f"{sgt_latest:,.2f} 亿")
-        mcol3.metric("Total", f"{total_latest:,.2f} Yi")
+        mcol3.metric("合计", f"{total_latest:,.2f} 亿")
 
         # Line chart with two traces
         fig = go.Figure()
@@ -1621,7 +1621,7 @@ elif page == "北向资金":
         st.markdown("### Detail Data")
         st.dataframe(nb_df, use_container_width=True, hide_index=True)
     else:
-        st.warning("No northbound capital data available")
+        st.warning("暂无北向资金数据")
 
 elif page == "龙虎榜":
     st.markdown("""
@@ -1670,17 +1670,17 @@ elif page == "龙虎榜":
         st.markdown("### 龙虎榜数据")
         st.dataframe(dt_df, use_container_width=True, hide_index=True)
     else:
-        st.warning("No dragon-tiger data available")
+        st.warning("暂无龙虎榜数据")
 
 elif page == "行业排名":
     st.markdown("""
     <div class="custom-card">
         <h3 style="margin: 0; color: #1e3a5f;">🏭 行业排名</h3>
-        <p style="color: #666; margin-top: 5px;">View industry sector rankings</p>
+        <p style="color: #666; margin-top: 5px;">查看行业板块涨跌排名</p>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.spinner("Loading industry ranking data..."):
+    with st.spinner("加载行业排名数据..."):
         ind_resp = safe_api("/api/industry?top_n=20")
 
     if ind_resp and ind_resp.get("data"):
@@ -1733,4 +1733,4 @@ elif page == "行业排名":
         st.markdown("### Full Ranking Data")
         st.dataframe(ind_df, use_container_width=True, hide_index=True)
     else:
-        st.warning("No industry ranking data available")
+        st.warning("暂无行业排名数据")
