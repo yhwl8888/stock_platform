@@ -25,3 +25,8 @@ Thumbs.db
 storage/uvicorn*.txt
 storage/*.db-journal
 test_output.txt
+
+# Generated reports
+report*.html
+report*.json
+report*.csv
