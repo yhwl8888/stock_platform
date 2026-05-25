@@ -1,14 +1,28 @@
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, Dict
+from collections import OrderedDict
+import threading
+import concurrent.futures
 
 import pandas as pd
 
 from data.store import DataStore
 from data.generator import generate_stock_data, SAMPLE_STOCKS, generate_sample_data
+from data.sina_source import fetch_sina_daily, check_sina_network
+from data.eastmoney_source import fetch_eastmoney_daily, check_eastmoney_network
 from config.settings import DEFAULT_START_DATE, DEFAULT_END_DATE
 
 _network_available = None
 _hist_network_available = None
+_sina_network_available = None
+_eastmoney_network_available = None
+
+
+# Memory cache: {cache_key: (timestamp, DataFrame)}
+_memory_cache: OrderedDict = OrderedDict()
+_memory_cache_lock = threading.Lock()
+_MEMORY_CACHE_MAX = 50
+_MEMORY_CACHE_TTL_MINUTES = 30
 
 
 def _check_network():
@@ -66,6 +80,56 @@ def _check_hist_network():
     return _hist_network_available
 
 
+def _check_sina_network():
+    global _sina_network_available
+    if _sina_network_available is not None:
+        return _sina_network_available
+    try:
+        _sina_network_available = check_sina_network(timeout=5)
+    except Exception:
+        _sina_network_available = False
+    return _sina_network_available
+
+
+def _check_eastmoney_network():
+    global _eastmoney_network_available
+    if _eastmoney_network_available is not None:
+        return _eastmoney_network_available
+    try:
+        _eastmoney_network_available = check_eastmoney_network(timeout=5)
+    except Exception:
+        _eastmoney_network_available = False
+    return _eastmoney_network_available
+
+
+def _get_cache_key(code: str, start: str, end: str) -> str:
+    return f"{code}|{start}|{end}"
+
+
+def _memory_cache_get(code: str, start: str, end: str) -> Optional[pd.DataFrame]:
+    key = _get_cache_key(code, start, end)
+    with _memory_cache_lock:
+        if key not in _memory_cache:
+            return None
+        ts, df = _memory_cache[key]
+        if datetime.now() - ts > timedelta(minutes=_MEMORY_CACHE_TTL_MINUTES):
+            del _memory_cache[key]
+            return None
+        _memory_cache.move_to_end(key)
+        return df.copy()
+
+
+def _memory_cache_put(code: str, start: str, end: str, df: pd.DataFrame):
+    if df is None or df.empty:
+        return
+    key = _get_cache_key(code, start, end)
+    with _memory_cache_lock:
+        _memory_cache[key] = (datetime.now(), df.copy())
+        _memory_cache.move_to_end(key)
+        while len(_memory_cache) > _MEMORY_CACHE_MAX:
+            _memory_cache.popitem(last=False)
+
+
 class DataFetcher:
     def __init__(self):
         self.store = DataStore()
@@ -84,8 +148,8 @@ class DataFetcher:
                 try:
                     import akshare as ak
                     df = ak.stock_info_a_code_name()
-                    if "证券代码" in df.columns and "证券简称" in df.columns:
-                        df = df.rename(columns={"证券代码": "code", "证券简称": "name"})
+                    if "\u8bc1\u5238\u4ee3\u7801" in df.columns and "\u8bc1\u5238\u7b80\u79f0" in df.columns:
+                        df = df.rename(columns={"\u8bc1\u5238\u4ee3\u7801": "code", "\u8bc1\u5238\u7b80\u79f0": "name"})
                     elif "code" not in df.columns:
                         result[0] = self._get_local_stock_list()
                         return
@@ -98,7 +162,7 @@ class DataFetcher:
                     self.store.save_basic(df)
                     result[0] = df
                 except Exception as e:
-                    print(f"获取股票列表失败: {e}")
+                    print(f"\u83b7\u53d6\u80a1\u7968\u5217\u8868\u5931\u8d25: {e}")
                     result[0] = self._get_local_stock_list()
             
             t = threading.Thread(target=fetch)
@@ -126,39 +190,90 @@ class DataFetcher:
         self.store.save_basic(df)
         return df
 
-    def fetch_daily(self, code: str, start: str = DEFAULT_START_DATE, end: str = DEFAULT_END_DATE) -> pd.DataFrame:
-        use_network = _check_network() and _check_hist_network()
-        if use_network:
-            import akshare as ak
-            try:
+    def _try_fetch_from_source(self, code: str, start: str, end: str, source_name: str) -> pd.DataFrame:
+        start_clean = start.replace("-", "")
+        end_clean = end.replace("-", "")
+        try:
+            if source_name == "akshare":
+                import akshare as ak
                 df = ak.stock_zh_a_hist(symbol=code, period="daily",
-                                        start_date=start, end_date=end, adjust="qfq")
+                                        start_date=start_clean, end_date=end_clean, adjust="qfq")
                 if df.empty:
-                    return df
+                    return pd.DataFrame()
                 df.columns = [col.strip() for col in df.columns]
                 df = df.rename(columns={
-                    "日期": "date", "开盘": "open", "收盘": "close",
-                    "最高": "high", "最低": "low", "成交量": "volume", "成交额": "amount"
+                    "\u65e5\u671f": "date", "\u5f00\u76d8": "open", "\u6536\u76d8": "close",
+                    "\u6700\u9ad8": "high", "\u6700\u4f4e": "low", "\u6210\u4ea4\u91cf": "volume", "\u6210\u4ea4\u989d": "amount"
                 })
                 df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y%m%d")
-                self.store.save_daily(df, code)
                 return df
-            except Exception as e:
-                print(f"网络获取 {code} 失败: {e}")
-        df = generate_stock_data(code, start=start.replace("-", ""), end=end.replace("-", ""))
+
+            elif source_name == "sina":
+                df = fetch_sina_daily(code, start_clean, end_clean)
+                return df
+
+            elif source_name == "eastmoney":
+                df = fetch_eastmoney_daily(code, start_clean, end_clean)
+                return df
+
+            elif source_name == "local":
+                df = generate_stock_data(code, start=start_clean, end=end_clean)
+                return df
+
+        except Exception as e:
+            print(f"[{source_name}] fetch {code} failed: {e}")
+
+        return pd.DataFrame()
+
+    def fetch_daily(self, code: str, start: str = DEFAULT_START_DATE, end: str = DEFAULT_END_DATE) -> pd.DataFrame:
+        cached = _memory_cache_get(code, start, end)
+        if cached is not None:
+            return cached
+
+        df = pd.DataFrame()
+        used_source = None
+
+        # Fallback chain: AKShare -> Sina -> Eastmoney -> local generator
+        sources = []
+        if _check_network() and _check_hist_network():
+            sources.append("akshare")
+        if _check_sina_network():
+            sources.append("sina")
+        if _check_eastmoney_network():
+            sources.append("eastmoney")
+        sources.append("local")
+
+        for source_name in sources:
+            df = self._try_fetch_from_source(code, start, end, source_name)
+            if not df.empty:
+                used_source = source_name
+                break
+
         if not df.empty:
             self.store.save_daily(df, code)
-            self._generated_codes.add(code)
+            _memory_cache_put(code, start, end, df)
+            if used_source == "local":
+                self._generated_codes.add(code)
+
         return df
 
     def get_daily_data(self, code: str, start: str = DEFAULT_START_DATE, end: str = DEFAULT_END_DATE) -> pd.DataFrame:
+        cached = _memory_cache_get(code, start, end)
+        if cached is not None:
+            return cached
+
         df = self.store.get_daily(code, start.replace("-", ""), end.replace("-", ""))
         if not df.empty:
+            _memory_cache_put(code, start, end, df)
             return df
+
         raw = self.fetch_daily(code, start, end)
         if raw.empty:
             return pd.DataFrame()
+
         df = self.store.get_daily(code, start.replace("-", ""), end.replace("-", ""))
+        if not df.empty:
+            _memory_cache_put(code, start, end, df)
         return df
 
     def ensure_data(self, code: str, start: str = DEFAULT_START_DATE, end: str = DEFAULT_END_DATE) -> pd.DataFrame:
@@ -167,6 +282,42 @@ class DataFetcher:
             self.fetch_daily(code, start, end)
             df = self.store.get_daily(code, start.replace("-", ""), end.replace("-", ""))
         return df
+
+    def fetch_daily_batch(self, codes: list, start: str = DEFAULT_START_DATE,
+                          end: str = DEFAULT_END_DATE) -> Dict[str, pd.DataFrame]:
+        results = {}
+        to_fetch = []
+
+        for code in codes:
+            cached = _memory_cache_get(code, start, end)
+            if cached is not None:
+                results[code] = cached
+                continue
+            db_df = self.store.get_daily(code, start.replace("-", ""), end.replace("-", ""))
+            if not db_df.empty:
+                _memory_cache_put(code, start, end, db_df)
+                results[code] = db_df
+            else:
+                to_fetch.append(code)
+
+        if not to_fetch:
+            return results
+
+        def _fetch_one(c):
+            df = self.fetch_daily(c, start, end)
+            return c, df
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(_fetch_one, c): c for c in to_fetch}
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    c, df = future.result()
+                    if not df.empty:
+                        results[c] = df
+                except Exception as e:
+                    print(f"Batch fetch error for {futures[future]}: {e}")
+
+        return results
 
     def ensure_all_sample_data(self, start: str = DEFAULT_START_DATE, end: str = DEFAULT_END_DATE):
         from data.generator import generate_sample_data
@@ -188,7 +339,7 @@ class DataFetcher:
                 df = df[mask]
             return df
         except Exception as e:
-            print(f"获取指数数据失败: {e}")
+            print(f"\u83b7\u53d6\u6307\u6570\u6570\u636e\u5931\u8d25: {e}")
             return pd.DataFrame()
 
     def fetch_fundamental(self, code: str):

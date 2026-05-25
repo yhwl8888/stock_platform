@@ -7,6 +7,7 @@ import httpx
 import json
 import time
 from datetime import datetime
+import streamlit.components.v1 as components
 
 API_BASE = "http://127.0.0.1:8000"
 
@@ -173,13 +174,16 @@ nav_items = [
     ("股票数据", "📊"),
     ("策略回测", "🧪"),
     ("策略对比", "📉"),
+    ("策略对比增强", "🔀"),
+    ("报告生成", "📄"),
     ("选股筛选", "🔍"),
     ("模拟交易", "💰"),
     ("自选股", "⭐"),
     ("实时行情", "📈"),
     ("价格预警", "🔔"),
     ("通知设置", "🔗"),
-    ("关于", "ℹ️")
+    ("关于", "ℹ️"),
+    ("数据源管理", "🗄️")
 ]
 
 st.sidebar.markdown("""
@@ -648,95 +652,349 @@ elif page == "策略对比":
     st.markdown("""
     <div class="custom-card">
         <h3 style="margin: 0; color: #1e3a5f;">📉 策略对比</h3>
-        <p style="color: #666; margin-top: 5px;">对比不同策略的回测表现</p>
+        <p style="color: #666; margin-top: 5px;">使用多选策略直接调用对比接口，一键对比回测结果</p>
     </div>
     """, unsafe_allow_html=True)
-    
+
     if "backtest_results" not in st.session_state:
         st.session_state.backtest_results = []
-    
+
+    resp = safe_api("/api/strategies")
+    strategies = resp.get("data", [])
+    strategy_options = {s["label"]: s["name"] for s in strategies}
+
     col1, col2 = st.columns([1, 3])
     with col1:
+        sel_labels = st.multiselect(
+            "选择策略（多选）",
+            list(strategy_options.keys()),
+            default=list(strategy_options.keys())[:2] if len(strategy_options) >= 2 else list(strategy_options.keys())
+        )
+        sel_strategies = [strategy_options[lbl] for lbl in sel_labels]
+
+        codes_input = st.text_input("股票代码", "000001,600519", key="duibi_codes")
+        import re
+        codes = [c.strip() for c in re.split(r'[,,\s]+', codes_input) if c.strip()]
+
+        start_date = st.text_input("开始日期", "20230101", key="duibi_start")
+        end_date = st.text_input("结束日期", "20251231", key="duibi_end")
+        capital = st.number_input("初始资金", value=1000000.0, step=100000.0, key="duibi_capital")
+
+        run_compare_btn = st.button("🚀 运行对比", type="primary", use_container_width=True)
+
+        st.markdown("---")
         if st.button("🗑️ 清空对比", use_container_width=True):
             st.session_state.backtest_results.clear()
             st.rerun()
-    
-    st.info("💡 在「策略回测」页面运行回测后，点击「保存到对比」按钮，即可在此查看对比结果")
-    
-    if st.session_state.backtest_results:
-        st.markdown("### 📊 指标对比表")
-        comp_data = []
-        for i, result in enumerate(st.session_state.backtest_results):
-            m = result.get("metrics", {})
-            comp_data.append({
-                "序号": i + 1,
-                "策略名���": result.get("label", ""),
-                "最终资产": f"{result.get('final_capital', 0):,.2f}",
-                "总收益率": result.get("total_return", ""),
-                "夏普比率": m.get("夏普比率", ""),
-                "最大回撤": m.get("最大回撤", ""),
-                "年化收益率": m.get("年化收益率", ""),
-                "胜率": m.get("胜率", ""),
-                "交易天数": m.get("交易天数", ""),
-            })
-        
-        comp_df = pd.DataFrame(comp_data)
-        st.dataframe(comp_df, use_container_width=True, hide_index=True)
-        
-        st.markdown("### 📈 资金曲线对比")
-        fig = go.Figure()
-        colors = ["#3498db", "#2ecc71", "#e74c3c", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"]
-        for i, result in enumerate(st.session_state.backtest_results):
-            equity = result.get("equity_curve", [])
-            if equity:
-                edf = pd.DataFrame(equity)
-                edf["date"] = pd.to_datetime(edf["date"])
-                fig.add_trace(go.Scatter(
-                    x=edf["date"],
-                    y=edf["value"],
-                    mode="lines",
-                    name=result.get("label", ""),
-                    line=dict(color=colors[i % len(colors)], width=3)
-                ))
-        fig.update_layout(
-            height=500,
-            xaxis_rangeslider_visible=False,
-            legend=dict(orientation="h", y=1.08, x=0),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.markdown("### 📉 回撤对比")
-        fig2 = go.Figure()
-        for i, result in enumerate(st.session_state.backtest_results):
-            drawdown = result.get("drawdown_curve", [])
-            if drawdown:
-                ddf = pd.DataFrame(drawdown)
-                ddf["date"] = pd.to_datetime(ddf["date"])
-                fig2.add_trace(go.Scatter(
-                    x=ddf["date"],
-                    y=ddf["value"] * 100,
-                    mode="lines",
-                    name=result.get("label", ""),
-                    line=dict(color=colors[i % len(colors)], width=2),
-                    fill="tozeroy"
-                ))
-        fig2.update_layout(
-            height=400,
-            xaxis_rangeslider_visible=False,
-            legend=dict(orientation="h", y=1.08, x=0),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.markdown("""
-        <div class="custom-card custom-card-warning">
-            <p style="margin: 0;">📭 暂无对比结果，请先运行回测并保存结果</p>
-        </div>
-        """, unsafe_allow_html=True)
 
+    with col2:
+        if run_compare_btn and sel_strategies and codes:
+            with st.spinner("对比回测进行中..."):
+                req = {
+                    "strategies": sel_strategies,
+                    "codes": codes,
+                    "start": start_date.replace("-", ""),
+                    "end": end_date.replace("-", ""),
+                    "initial_capital": float(capital),
+                }
+                result = safe_api("/api/backtest/compare", method="POST", data=req, timeout=120)
+
+            if result and result.get("results"):
+                st.session_state.backtest_results = []
+                for r in result["results"]:
+                    m = r.get("metrics", {})
+                    st.session_state.backtest_results.append({
+                        "label": r.get("label", r.get("strategy", "")),
+                        "final_capital": r.get("final_capital", 0),
+                        "total_return": r.get("total_return", "0%"),
+                        "metrics": m,
+                        "equity_curve": r.get("equity_curve", []),
+                        "drawdown_curve": r.get("drawdown_curve", []),
+                        "trades": r.get("trades", []),
+                    })
+                st.success(f"✅ 对比完成，共 {len(st.session_state.backtest_results)} 个策略")
+                st.rerun()
+            elif result:
+                st.warning(result.get("message", "对比未产生结果"))
+
+        if st.session_state.backtest_results:
+            st.markdown("### 📊 指标对比表")
+            comp_data = []
+            for i, r in enumerate(st.session_state.backtest_results):
+                m = r.get("metrics", {})
+                comp_data.append({
+                    "序号": i + 1,
+                    "策略名称": r.get("label", ""),
+                    "最终资产": f"{r.get('final_capital', 0):,.2f}",
+                    "总收益率": r.get("total_return", ""),
+                    "夏普比率": m.get("夏普比率", ""),
+                    "最大回撒": m.get("最大回撒", ""),
+                    "年化收益率": m.get("年化收益率", ""),
+                    "胜率": m.get("胜率", ""),
+                    "交易天数": m.get("交易天数", ""),
+                })
+            st.dataframe(pd.DataFrame(comp_data), use_container_width=True, hide_index=True)
+
+            st.markdown("### 📈 资金曲线对比")
+            fig = go.Figure()
+            colors = ["#3498db", "#2ecc71", "#e74c3c", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"]
+            for i, r in enumerate(st.session_state.backtest_results):
+                equity = r.get("equity_curve", [])
+                if equity:
+                    edf = pd.DataFrame(equity)
+                    edf["date"] = pd.to_datetime(edf["date"])
+                    fig.add_trace(go.Scatter(
+                        x=edf["date"], y=edf["value"],
+                        mode="lines", name=r.get("label", ""),
+                        line=dict(color=colors[i % len(colors)], width=3)
+                    ))
+            fig.update_layout(height=500, xaxis_rangeslider_visible=False,
+                             legend=dict(orientation="h", y=1.08, x=0),
+                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("### 📉 回撒对比")
+            fig2 = go.Figure()
+            for i, r in enumerate(st.session_state.backtest_results):
+                drawdown = r.get("drawdown_curve", [])
+                if drawdown:
+                    ddf = pd.DataFrame(drawdown)
+                    ddf["date"] = pd.to_datetime(ddf["date"])
+                    fig2.add_trace(go.Scatter(
+                        x=ddf["date"], y=ddf["value"] * 100,
+                        mode="lines", name=r.get("label", ""),
+                        line=dict(color=colors[i % len(colors)], width=2),
+                        fill="tozeroy"
+                    ))
+            fig2.update_layout(height=400, xaxis_rangeslider_visible=False,
+                              legend=dict(orientation="h", y=1.08, x=0),
+                              paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig2, use_container_width=True)
+
+            st.markdown("### 📊 风险指标对比")
+            risk_data = []
+            for r in st.session_state.backtest_results:
+                m = r.get("metrics", {})
+                risk_data.append({
+                    "策略": r.get("label", ""),
+                    "夏普比率": m.get("夏普比率", "N/A"),
+                    "最大回撒": m.get("最大回撒", "N/A"),
+                    "年化波动率": m.get("年化波动率", "N/A"),
+                    "年化收益率": m.get("年化收益率", "N/A"),
+                    "胜率": m.get("胜率", "N/A"),
+                })
+            st.dataframe(pd.DataFrame(risk_data), use_container_width=True, hide_index=True)
+        else:
+            st.markdown("""
+            <div class="custom-card custom-card-warning">
+                <p style="margin: 0;">📭 暂无对比结果，请在左侧选择策略并点击「运行对比」</p>
+            </div>
+            """, unsafe_allow_html=True)
+elif page == "策略对比增强":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">🔀 策略对比增强</h3>
+        <p style="color: #666; margin-top: 5px;">多策略参数化对比，支持自定义参数配置</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    resp = safe_api("/api/strategies")
+    all_strategies = resp.get("data", [])
+    strategy_map = {s["label"]: s for s in all_strategies}
+
+    st.markdown("### ➕ 选择对比策略")
+    selected_labels = st.multiselect(
+        "选择要对比的策略（可多选）",
+        list(strategy_map.keys()),
+        default=list(strategy_map.keys())[:2] if len(strategy_map) >= 2 else list(strategy_map.keys()),
+        key="enh_compare_strategies"
+    )
+
+    if "enh_compare_configs" not in st.session_state:
+        st.session_state.enh_compare_configs = {}
+
+    if selected_labels:
+        st.markdown("### ⚙️ 策略参数配置")
+        param_labels = {
+            "fast_period": "快线周期", "slow_period": "慢线周期",
+            "period": "计算周期", "oversold": "超卖阈值", "overbought": "超买阈值",
+            "std_dev": "标准差倍数",
+        }
+
+        configs = []
+        for label in selected_labels:
+            sinfo = strategy_map[label]
+            with st.expander(f"🔧 {label} 参数", expanded=False):
+                params = {}
+                for pname in sinfo.get("params", {}):
+                    plabel = param_labels.get(pname, pname)
+                    default = 20 if "period" in pname.lower() or "slow" in pname.lower() else (
+                        5 if "fast" in pname.lower() else 30 if "oversold" in pname.lower() else 70 if "overbought" in pname.lower() else 2.0 if "std" in pname.lower() else 10)
+                    val = st.number_input(plabel, value=float(default) if isinstance(default, float) else int(default), key=f"enh_{sinfo['name']}_{pname}")
+                    params[pname] = val
+            configs.append({"strategy": sinfo["name"], "label": label, "params": params})
+
+        st.markdown("### 📅 回测设置")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            enh_codes = st.text_input("股票代码", "000001,600519", key="enh_codes")
+        with col2:
+            enh_start = st.text_input("开始日期", "20230101", key="enh_start")
+        with col3:
+            enh_end = st.text_input("结束日期", "20251231", key="enh_end")
+
+        enh_capital = st.number_input("初始资金", value=1000000.0, step=100000.0, key="enh_capital")
+
+        if st.button("🚀 运行增强对比", type="primary", use_container_width=True):
+            import re as _re
+            codes_list = [c.strip() for c in _re.split(r'[,,\s]+', enh_codes) if c.strip()]
+            if not codes_list:
+                st.warning("请输入股票代码")
+            else:
+                with st.spinner("增强对比回测进行中..."):
+                    req = {
+                        "strategies": [c["strategy"] for c in configs],
+                        "codes": codes_list,
+                        "start": enh_start.replace("-", ""),
+                        "end": enh_end.replace("-", ""),
+                        "initial_capital": float(enh_capital),
+                        "params_map": {c["strategy"]: c["params"] for c in configs},
+                    }
+                    result = safe_api("/api/backtest/compare", method="POST", data=req, timeout=120)
+
+                if result and result.get("results"):
+                    st.success(f"✅ 增强对比完成，共 {len(result['results'])} 个策略")
+
+                    st.markdown("### 📊 综合对比表")
+                    rows = []
+                    for r in result["results"]:
+                        m = r.get("metrics", {})
+                        rows.append({
+                            "策略": r.get("label", r.get("strategy", "")),
+                            "最终资产": f"{r.get('final_capital', 0):,.2f}",
+                            "总收益率": r.get("total_return", ""),
+                            "夏普比率": m.get("夏普比率", ""),
+                            "最大回撒": m.get("最大回撒", ""),
+                            "年化收益率": m.get("年化收益率", ""),
+                            "年化波动率": m.get("年化波动率", ""),
+                            "胜率": m.get("胜率", ""),
+                        })
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                    st.markdown("### 📈 叠加资金曲线")
+                    colors = ["#3498db", "#2ecc71", "#e74c3c", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"]
+                    fig = go.Figure()
+                    for i, r in enumerate(result["results"]):
+                        eq = r.get("equity_curve", [])
+                        if eq:
+                            edf = pd.DataFrame(eq)
+                            edf["date"] = pd.to_datetime(edf["date"])
+                            fig.add_trace(go.Scatter(
+                                x=edf["date"], y=edf["value"],
+                                mode="lines", name=r.get("label", ""),
+                                line=dict(color=colors[i % len(colors)], width=3)
+                            ))
+                    fig.update_layout(height=500, xaxis_rangeslider_visible=False,
+                                     legend=dict(orientation="h", y=1.08, x=0),
+                                     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    st.markdown("### 📊 风险指标对比")
+                    risk_rows = []
+                    for r in result["results"]:
+                        m = r.get("metrics", {})
+                        risk_rows.append({
+                            "策略": r.get("label", r.get("strategy", "")),
+                            "夏普比率": m.get("夏普比率", "N/A"),
+                            "最大回撒": m.get("最大回撒", "N/A"),
+                            "年化波动率": m.get("年化波动率", "N/A"),
+                            "年化收益率": m.get("年化收益率", "N/A"),
+                            "胜率": m.get("胜率", "N/A"),
+                            "交易天数": m.get("交易天数", "N/A"),
+                        })
+                    st.dataframe(pd.DataFrame(risk_rows), use_container_width=True, hide_index=True)
+                elif result:
+                    st.warning(result.get("message", "对比未产生结果"))
+    else:
+        st.info("请在上方选择要对比的策略")
+elif page == "报告生成":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">📄 报告生成</h3>
+        <p style="color: #666; margin-top: 5px;">生成策略回测报告，支持多种格式导出</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    resp = safe_api("/api/strategies")
+    report_strategies = resp.get("data", [])
+    strategy_options = {s["label"]: s["name"] for s in report_strategies}
+
+    with st.form("report_form"):
+        st.markdown("### 📋 报告参数")
+        col1, col2 = st.columns(2)
+        with col1:
+            rep_sel_label = st.selectbox("选择策略", list(strategy_options.keys())) if strategy_options else ""
+            rep_strategy = strategy_options.get(rep_sel_label, "ma_cross")
+            rep_codes = st.text_input("股票代码（逗号分隔）", "000001,600519")
+        with col2:
+            rep_start = st.text_input("开始日期", "20230101", key="rep_start")
+            rep_end = st.text_input("结束日期", "20251231", key="rep_end")
+            rep_capital = st.number_input("初始资金", value=1000000.0, step=100000.0, key="rep_capital")
+
+        rep_format = st.selectbox("导出格式", ["HTML", "CSV", "JSON", "All"], index=0)
+
+        submitted = st.form_submit_button("📥 生成报告", type="primary", use_container_width=True)
+
+    if submitted:
+        import re as _re
+        codes_list = [c.strip() for c in _re.split(r'[,,\s]+', rep_codes) if c.strip()]
+        if not codes_list:
+            st.warning("请输入股票代码")
+        else:
+            with st.spinner("正在生成报告..."):
+                req = {
+                    "strategy": rep_strategy,
+                    "codes": codes_list,
+                    "start": rep_start.replace("-", ""),
+                    "end": rep_end.replace("-", ""),
+                    "initial_capital": float(rep_capital),
+                    "format": rep_format.lower(),
+                }
+                result = safe_api("/api/report/generate", method="POST", data=req, timeout=120)
+
+            if result:
+                if rep_format == "HTML" or rep_format == "All":
+                    html_content = result.get("html", result.get("report", ""))
+                    if html_content:
+                        st.markdown("### 📄 HTML 报告")
+                        components.html(html_content, height=800, scrolling=True)
+                    else:
+                        st.info("未获取到 HTML 报告内容")
+
+                if rep_format == "CSV" or rep_format == "All":
+                    csv_data = result.get("csv", "")
+                    if csv_data:
+                        st.markdown("### 📊 CSV 数据")
+                        if isinstance(csv_data, str):
+                            csv_bytes = csv_data.encode("utf-8-sig")
+                        else:
+                            csv_bytes = str(csv_data).encode("utf-8-sig")
+                        st.download_button("📥 下载 CSV", csv_bytes, "report.csv", "text/csv")
+
+                if rep_format == "JSON" or rep_format == "All":
+                    json_data = result.get("json", result.get("data", ""))
+                    if json_data:
+                        st.markdown("### 📋 JSON 数据")
+                        json_str = json.dumps(json_data, ensure_ascii=False, indent=2) if isinstance(json_data, (dict, list)) else str(json_data)
+                        st.download_button("📥 下载 JSON", json_str.encode("utf-8"), "report.json", "application/json")
+                        with st.expander("预览 JSON", expanded=False):
+                            st.code(json_str, language="json")
+
+                if rep_format not in ("HTML", "CSV", "JSON", "All"):
+                    st.success("报告已生成")
+                    st.json(result)
+            else:
+                st.error("报告生成失败，请检查参数或后端服务")
 elif page == "自选股":
     st.markdown("""
     <div class="custom-card">
@@ -1145,3 +1403,57 @@ python -m streamlit run web/app.py
         <p>© 2024 All Rights Reserved</p>
     </div>
     """, unsafe_allow_html=True)
+
+elif page == "数据源管理":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">🗄️ 数据源管理</h3>
+        <p style="color: #666; margin-top: 5px;">查看和管理系统数据源的可用性</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        refresh_sources = st.button("🔄 刷新数据源", type="primary", use_container_width=True)
+
+    if refresh_sources or True:
+        with st.spinner("正在获取数据源信息..."):
+            resp = safe_api("/api/data/sources", timeout=15)
+
+        sources = resp.get("data", resp.get("sources", []))
+        if sources:
+            st.markdown("### 📦 数据源列表")
+            for src in sources:
+                name = src.get("name", "Unknown")
+                src_type = src.get("type", src.get("source_type", "N/A"))
+                available = src.get("available", src.get("enabled", False))
+                status_icon = "✅" if available else "❌"
+                status_text = "可用" if available else "不可用"
+                border_color = "#2ecc71" if available else "#e74c3c"
+
+                st.markdown(f"""
+                <div class="custom-card" style="border-left-color: {border_color};">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="margin: 0;">{status_icon} {name}</h4>
+                            <p style="margin: 5px 0 0 0; color: #666; font-size: 0.9em;">类型: {src_type}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="color: {'#2ecc71' if available else '#e74c3c'}; font-weight: bold;">{status_text}</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            cols = st.columns(4)
+            available_count = sum(1 for s in sources if s.get("available", s.get("enabled", False)))
+            cols[0].metric("数据源总数", len(sources))
+            cols[1].metric("可用", available_count)
+            cols[2].metric("不可用", len(sources) - available_count)
+            cols[3].metric("可用率", f"{available_count/len(sources)*100:.0f}%" if sources else "N/A")
+        else:
+            st.markdown("""
+            <div class="custom-card custom-card-warning">
+                <p style="margin: 0;">⚠️ 未获取到数据源信息，请检查后端服务是否启动</p>
+            </div>
+            """, unsafe_allow_html=True)

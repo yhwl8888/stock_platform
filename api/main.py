@@ -587,6 +587,226 @@ def check_price_alerts():
     return {"alerts": alerts.to_dict(orient="records"), "triggered": triggered}
 
 
+
+
+# --- Strategy Comparison & Report Generation ---
+
+class CompareRequest(BaseModel):
+    strategies: List[dict]
+    codes: List[str]
+    start: str = "20200101"
+    end: str = "20251231"
+    initial_capital: float = 1000000.0
+
+
+class ReportRequest(BaseModel):
+    strategy: str
+    codes: List[str]
+    start: str = "20200101"
+    end: str = "20251231"
+    initial_capital: float = 1000000.0
+    params: dict = {}
+    format: str = "html"
+
+
+@app.post("/api/backtest/compare")
+def compare_strategies(req: CompareRequest):
+    """Multi-strategy backtest comparison"""
+    data = {}
+    for code in req.codes:
+        try:
+            df = fetcher.ensure_data(code, req.start, req.end)
+            if not df.empty:
+                data[code] = df
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Data fetch failed for {code}: {e}")
+    if not data:
+        raise HTTPException(status_code=404, detail="No valid data")
+
+    results = []
+    for s in req.strategies:
+        name = s.get("name", "")
+        params = s.get("params", {})
+        label = s.get("label", get_strategy_label(name))
+        try:
+            strategy = create_strategy(name, **params)
+            result = run_backtest(strategy, data, req.initial_capital)
+            equity = [{"date": str(dt.date()) if hasattr(dt, "date") else str(dt), "value": round(float(val), 2)}
+                      for dt, val in result.equity_curve.items()]
+            drawdown = [{"date": str(dt.date()) if hasattr(dt, "date") else str(dt), "value": round(float(val), 4)}
+                        for dt, val in result.drawdown_curve.items()]
+            results.append({
+                "strategy_name": label, "strategy_key": name,
+                "metrics": format_metrics(result.metrics), "raw_metrics": result.metrics,
+                "trade_metrics": result.trade_metrics,
+                "equity_curve": equity, "drawdown_curve": drawdown,
+                "trades": result.trades,
+                "signals": [{"code": sig.code, "date": sig.date, "action": sig.action, "price": sig.price, "reason": sig.reason}
+                            for sig in result.signals],
+                "final_capital": round(result.final_capital, 2),
+                "total_return": f"{result.total_return * 100:.2f}%",
+            })
+        except Exception as e:
+            results.append({"strategy_name": label, "strategy_key": name, "error": str(e)})
+
+    risk_comparison = []
+    for r in results:
+        if "error" in r:
+            continue
+        equity = r.get("equity_curve", [])
+        if equity:
+            try:
+                from engine.risk_analysis import generate_risk_report
+                ec = pd.Series([d["value"] for d in equity], index=pd.to_datetime([d["date"] for d in equity]))
+                risk = generate_risk_report(ec)
+                risk_comparison.append({"strategy": r["strategy_name"], "risk": risk.get("formatted", {}), "raw_risk": risk.get("raw", {})})
+            except Exception:
+                pass
+
+    return {"results": results, "risk_comparison": risk_comparison}
+
+
+@app.post("/api/report/generate")
+def generate_report(req: ReportRequest):
+    """Generate backtest report"""
+    try:
+        strategy = create_strategy(req.strategy, **req.params)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    data = {}
+    for code in req.codes:
+        try:
+            df = fetcher.ensure_data(code, req.start, req.end)
+            if not df.empty:
+                data[code] = df
+        except Exception:
+            pass
+    if not data:
+        raise HTTPException(status_code=404, detail="No valid data")
+
+    result = run_backtest(strategy, data, req.initial_capital)
+    equity = [{"date": str(dt.date()) if hasattr(dt, "date") else str(dt), "value": round(float(val), 2)}
+              for dt, val in result.equity_curve.items()]
+    drawdown = [{"date": str(dt.date()) if hasattr(dt, "date") else str(dt), "value": round(float(val), 4)}
+                for dt, val in result.drawdown_curve.items()]
+
+    result_dict = {
+        "strategy_name": strategy.name, "metrics": format_metrics(result.metrics),
+        "trade_metrics": result.trade_metrics,
+        "equity_curve": equity, "drawdown_curve": drawdown,
+        "trades": result.trades,
+        "final_capital": round(result.final_capital, 2),
+        "total_return": f"{result.total_return * 100:.2f}%",
+        "initial_capital": req.initial_capital,
+    }
+
+    from engine.report_generator import ReportGenerator
+    gen = ReportGenerator()
+
+    if req.format == "html":
+        html = gen.generate_html_report(result_dict, f"Backtest Report - {strategy.name}")
+        return {"format": "html", "content": html}
+    elif req.format == "csv":
+        csv_path = gen.generate_csv(result_dict)
+        return {"format": "csv", "path": csv_path}
+    elif req.format == "json":
+        json_path = gen.generate_json(result_dict)
+        return {"format": "json", "path": json_path}
+    else:
+        reports = gen.export_all(result_dict)
+        return {"format": "all", "reports": reports}
+
+
+@app.get("/api/risk/{code}")
+def get_risk_analysis(code: str, start: str = "20200101", end: str = "20251231"):
+    """Risk analysis for a single stock"""
+    df = fetcher.get_daily_data(code, start, end)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"Stock {code} data not found")
+
+    equity = df["close"]
+    from engine.risk_analysis import calculate_risk_metrics, generate_risk_report, rolling_sharpe, rolling_volatility, drawdown_analysis
+    risk = calculate_risk_metrics(equity)
+    report = generate_risk_report(equity)
+    dd = drawdown_analysis(equity)
+
+    return {"code": code, "risk_metrics": risk, "risk_report": report, "drawdown_analysis": dd}
+
+
+@app.get("/api/data/sources")
+def list_data_sources():
+    """List available data sources and their status"""
+    from data.tencent_source import check_tencent_network
+    from data.fetcher import _check_network, _check_hist_network
+    sources = []
+    ak_ok = _check_network() and _check_hist_network()
+    sources.append({"name": "AKShare", "type": "historical", "available": ak_ok})
+    try:
+        tc_ok = check_tencent_network(timeout=3)
+    except Exception:
+        tc_ok = False
+    sources.append({"name": "Tencent Finance", "type": "realtime", "available": tc_ok})
+    try:
+        from data.sina_source import check_sina_network
+        sina_ok = check_sina_network(timeout=3)
+    except Exception:
+        sina_ok = False
+    sources.append({"name": "Sina Finance", "type": "historical+realtime", "available": sina_ok})
+    try:
+        from data.eastmoney_source import check_eastmoney_network
+        em_ok = check_eastmoney_network(timeout=3)
+    except Exception:
+        em_ok = False
+    sources.append({"name": "Eastmoney", "type": "historical+realtime", "available": em_ok})
+    sources.append({"name": "Local Generated", "type": "offline", "available": True})
+    return {"sources": sources}
+
+
+@app.post("/api/backtest/batch")
+def batch_backtest(req: CompareRequest):
+    """Run backtest for multiple strategies in batch and return comparison with reports"""
+    data = {}
+    for code in req.codes:
+        try:
+            df = fetcher.ensure_data(code, req.start, req.end)
+            if not df.empty:
+                data[code] = df
+        except Exception:
+            pass
+    if not data:
+        raise HTTPException(status_code=404, detail="No valid data")
+
+    results = []
+    for s in req.strategies:
+        name = s.get("name", "")
+        params = s.get("params", {})
+        label = s.get("label", get_strategy_label(name))
+        try:
+            strategy = create_strategy(name, **params)
+            result = run_backtest(strategy, data, req.initial_capital)
+            equity = [{"date": str(dt.date()) if hasattr(dt, "date") else str(dt), "value": round(float(val), 2)}
+                      for dt, val in result.equity_curve.items()]
+            results.append({
+                "strategy_name": label, "strategy_key": name,
+                "metrics": format_metrics(result.metrics),
+                "trade_metrics": result.trade_metrics,
+                "equity_curve": equity,
+                "final_capital": round(result.final_capital, 2),
+                "total_return": f"{result.total_return * 100:.2f}%",
+            })
+        except Exception as e:
+            results.append({"strategy_name": label, "strategy_key": name, "error": str(e)})
+
+    # Generate comparison report
+    from engine.report_generator import ReportGenerator
+    gen = ReportGenerator()
+    valid_results = [r for r in results if "error" not in r]
+    comparison_html = gen.generate_comparison_html(valid_results, "Strategy Comparison") if valid_results else ""
+
+    return {"results": results, "comparison_html": comparison_html}
+
+
 @app.on_event("shutdown")
 def shutdown():
     fetcher.close()
