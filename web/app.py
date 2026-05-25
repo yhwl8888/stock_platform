@@ -690,8 +690,9 @@ elif page == "策略对比":
     with col2:
         if run_compare_btn and sel_strategies and codes:
             with st.spinner("对比回测进行中..."):
+                strategy_dicts = [{"name": s, "params": {}, "label": lbl} for lbl, s in strategy_options.items() if s in sel_strategies]
                 req = {
-                    "strategies": sel_strategies,
+                    "strategies": strategy_dicts,
                     "codes": codes,
                     "start": start_date.replace("-", ""),
                     "end": end_date.replace("-", ""),
@@ -704,7 +705,7 @@ elif page == "策略对比":
                 for r in result["results"]:
                     m = r.get("metrics", {})
                     st.session_state.backtest_results.append({
-                        "label": r.get("label", r.get("strategy", "")),
+                        "label": r.get("strategy_name", r.get("label", r.get("strategy", ""))),
                         "final_capital": r.get("final_capital", 0),
                         "total_return": r.get("total_return", "0%"),
                         "metrics": m,
@@ -852,13 +853,13 @@ elif page == "策略对比增强":
                 st.warning("请输入股票代码")
             else:
                 with st.spinner("增强对比回测进行中..."):
+                    strategy_dicts = [{"name": c["strategy"], "params": c["params"], "label": c.get("label", c["strategy"])} for c in configs]
                     req = {
-                        "strategies": [c["strategy"] for c in configs],
+                        "strategies": strategy_dicts,
                         "codes": codes_list,
                         "start": enh_start.replace("-", ""),
                         "end": enh_end.replace("-", ""),
                         "initial_capital": float(enh_capital),
-                        "params_map": {c["strategy"]: c["params"] for c in configs},
                     }
                     result = safe_api("/api/backtest/compare", method="POST", data=req, timeout=120)
 
