@@ -183,7 +183,11 @@ nav_items = [
     ("价格预警", "🔔"),
     ("通知设置", "🔗"),
     ("关于", "ℹ️"),
-    ("数据源管理", "🗄️")
+    ("数据源管理", "🗄️"),
+    ("Fund Flow", "💰"),
+    ("Northbound Capital", "🧭"),
+    ("Dragon Tiger Board", "🐉"),
+    ("Industry Ranking", "🏭")
 ]
 
 st.sidebar.markdown("""
@@ -326,16 +330,37 @@ if page == "股票数据":
                 fig.update_layout(height=600, xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
 
-                tab1, tab2 = st.tabs(["数据表", "基本信息"])
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["数据表", "基本信息", "Fund Flow", "Concept Blocks", "Reports"])
                 with tab1:
                     st.dataframe(df2, use_container_width=True, hide_index=True)
                 with tab2:
                     latest = df2.iloc[-1]
                     col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("最新收盘", f"{latest['close']:.2f}")
+                    col1.metric("最新收益", f"{latest['close']:.2f}")
                     col2.metric("最高", f"{latest['high']:.2f}")
                     col3.metric("最低", f"{latest['low']:.2f}")
                     col4.metric("成交量", f"{latest['volume']:.0f}")
+                with tab3:
+                    ff_resp = safe_api(f"/api/fund-flow/{sel_code}?mode=daily")
+                    if ff_resp and ff_resp.get("data"):
+                        ff_df = pd.DataFrame(ff_resp["data"])
+                        st.dataframe(ff_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No fund flow data available")
+                with tab4:
+                    concept_resp = safe_api(f"/api/concept/{sel_code}")
+                    if concept_resp and concept_resp.get("data"):
+                        concept_df = pd.DataFrame(concept_resp["data"])
+                        st.dataframe(concept_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No concept data available")
+                with tab5:
+                    reports_resp = safe_api(f"/api/reports/{sel_code}")
+                    if reports_resp and reports_resp.get("data"):
+                        reports_df = pd.DataFrame(reports_resp["data"])
+                        st.dataframe(reports_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No reports data available")
     else:
         st.info("搜索或加载股票数据")
 
@@ -1480,3 +1505,232 @@ elif page == "数据源管理":
                 <p style="margin: 0;">⚠️ 未获取到数据源信息，请检查后端服务是否启动</p>
             </div>
             """, unsafe_allow_html=True)
+elif page == "Fund Flow":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">Fund Flow</h3>
+        <p style="color: #666; margin-top: 5px;">Analyze capital flow for individual stocks</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        ff_code = st.text_input("Stock Code", value="600519", key="ff_code")
+        ff_mode = st.selectbox("Mode", ["minute", "daily"], key="ff_mode")
+    with col2:
+        if ff_code:
+            with st.spinner("Loading fund flow data..."):
+                ff_resp = safe_api(f"/api/fund-flow/{ff_code}?mode={ff_mode}")
+
+            if ff_resp and ff_resp.get("data"):
+                ff_df = pd.DataFrame(ff_resp["data"])
+                ff_df["date"] = pd.to_datetime(ff_df.get("date", ff_df.get("time", ff_df.index)))
+                ff_df = ff_df.sort_values("date")
+
+                # Summary metrics
+                if "main_net" in ff_df.columns:
+                    total_main = ff_df["main_net"].sum()
+                    total_large = ff_df["large_net"].sum() if "large_net" in ff_df.columns else 0
+                    mcol1, mcol2 = st.columns(2)
+                    mcol1.metric("Total Main Net", f"{total_main:,.0f}")
+                    mcol2.metric("Total Large Net", f"{total_large:,.0f}")
+
+                if ff_mode == "minute" and "main_net" in ff_df.columns:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=ff_df["date"], y=ff_df["main_net"],
+                        mode="lines", name="Main Net",
+                        line=dict(color="#3498db", width=2)
+                    ))
+                    fig.update_layout(
+                        title="Main Net Flow (Minute)",
+                        xaxis_title="Time", yaxis_title="Amount",
+                        height=500
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                elif ff_mode == "daily" and "main_net" in ff_df.columns:
+                    colors = ["#2ecc71" if v >= 0 else "#e74c3c" for v in ff_df["main_net"]]
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        x=ff_df["date"], y=ff_df["main_net"],
+                        name="Main Net", marker_color=colors
+                    ))
+                    fig.update_layout(
+                        title="Main Net Flow (Daily - Last 30 Days)",
+                        xaxis_title="Date", yaxis_title="Amount",
+                        height=500
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown("### Detail Data")
+                st.dataframe(ff_df, use_container_width=True, hide_index=True)
+            else:
+                st.warning("No fund flow data available")
+
+elif page == "Northbound Capital":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">Northbound Capital</h3>
+        <p style="color: #666; margin-top: 5px;">Track northbound capital flow (HGT + SGT)</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.spinner("Loading northbound data..."):
+        nb_resp = safe_api("/api/northbound")
+
+    if nb_resp and nb_resp.get("data"):
+        nb_df = pd.DataFrame(nb_resp["data"])
+        nb_df["date"] = pd.to_datetime(nb_df.get("date", nb_df.index))
+        nb_df = nb_df.sort_values("date")
+
+        # Summary metrics
+        hgt_col = "hgt_yi" if "hgt_yi" in nb_df.columns else nb_df.columns[1]
+        sgt_col = "sgt_yi" if "sgt_yi" in nb_df.columns else nb_df.columns[2]
+
+        hgt_latest = nb_df[hgt_col].iloc[-1] if len(nb_df) > 0 else 0
+        sgt_latest = nb_df[sgt_col].iloc[-1] if len(nb_df) > 0 else 0
+        total_latest = hgt_latest + sgt_latest
+
+        mcol1, mcol2, mcol3 = st.columns(3)
+        hgt_color = "#2ecc71" if hgt_latest >= 0 else "#e74c3c"
+        sgt_color = "#2ecc71" if sgt_latest >= 0 else "#e74c3c"
+        total_color = "#2ecc71" if total_latest >= 0 else "#e74c3c"
+        mcol1.metric("HGT Latest", f"{hgt_latest:,.2f} Yi")
+        mcol2.metric("SGT Latest", f"{sgt_latest:,.2f} Yi")
+        mcol3.metric("Total", f"{total_latest:,.2f} Yi")
+
+        # Line chart with two traces
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=nb_df["date"], y=nb_df[hgt_col],
+            mode="lines", name="HGT (Shanghai)",
+            line=dict(color="#2ecc71", width=2)
+        ))
+        fig.add_trace(go.Scatter(
+            x=nb_df["date"], y=nb_df[sgt_col],
+            mode="lines", name="SGT (Shenzhen)",
+            line=dict(color="#3498db", width=2)
+        ))
+        fig.update_layout(
+            title="Northbound Capital Flow",
+            xaxis_title="Date", yaxis_title="Amount (Yi)",
+            height=500
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("### Detail Data")
+        st.dataframe(nb_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No northbound capital data available")
+
+elif page == "Dragon Tiger Board":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">Dragon Tiger Board</h3>
+        <p style="color: #666; margin-top: 5px;">View dragon-tiger board data (top movers)</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        dt_code = st.text_input("Stock Code (optional)", value="", key="dt_code")
+    with col2:
+        dt_start = st.date_input("Start Date", key="dt_start")
+    with col3:
+        dt_end = st.date_input("End Date", key="dt_end")
+
+    params = []
+    if dt_code.strip():
+        params.append(f"code={dt_code.strip()}")
+    if dt_start:
+        params.append(f"start_date={dt_start.strftime('%Y-%m-%d')}")
+    if dt_end:
+        params.append(f"end_date={dt_end.strftime('%Y-%m-%d')}")
+    query = "?" + "&".join(params) if params else ""
+
+    with st.spinner("Loading dragon-tiger data..."):
+        dt_resp = safe_api(f"/api/dragon-tiger{query}")
+
+    if dt_resp and dt_resp.get("data"):
+        dt_df = pd.DataFrame(dt_resp["data"])
+
+        # Show net_buy as colored metric if available
+        if "net_buy" in dt_df.columns:
+            total_net = dt_df["net_buy"].sum()
+            net_color = "#2ecc71" if total_net >= 0 else "#e74c3c"
+            st.markdown(f"""
+            <div class="custom-card" style="border-left-color: {net_color};">
+                <h4 style="margin: 0;">Total Net Buy</h4>
+                <p style="margin: 5px 0 0 0; font-size: 1.5em; color: {net_color}; font-weight: bold;">
+                    {total_net:,.0f}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("### Dragon Tiger Data")
+        st.dataframe(dt_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No dragon-tiger data available")
+
+elif page == "Industry Ranking":
+    st.markdown("""
+    <div class="custom-card">
+        <h3 style="margin: 0; color: #1e3a5f;">Industry Ranking</h3>
+        <p style="color: #666; margin-top: 5px;">View industry sector rankings</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.spinner("Loading industry ranking data..."):
+        ind_resp = safe_api("/api/industry?top_n=20")
+
+    if ind_resp and ind_resp.get("data"):
+        ind_df = pd.DataFrame(ind_resp["data"])
+
+        if "change_pct" in ind_df.columns:
+            # Top industries (positive change)
+            top_df = ind_df[ind_df["change_pct"] > 0].head(10)
+            # Bottom industries (negative change)
+            bottom_df = ind_df[ind_df["change_pct"] < 0].sort_values("change_pct").head(10)
+
+            col_top, col_bottom = st.columns(2)
+
+            with col_top:
+                st.markdown("### Top Industries")
+                for _, row in top_df.iterrows():
+                    leader = row.get("leader", row.get("leader_name", "N/A"))
+                    st.markdown(f"""
+                    <div class="custom-card" style="border-left-color: #2ecc71;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <h4 style="margin: 0;">{row.get('name', row.get('industry', 'N/A'))}</h4>
+                                <p style="margin: 3px 0 0 0; color: #666; font-size: 0.9em;">Leader: {leader}</p>
+                            </div>
+                            <div style="color: #2ecc71; font-weight: bold; font-size: 1.2em;">
+                                +{row['change_pct']:.2f}%
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            with col_bottom:
+                st.markdown("### Bottom Industries")
+                for _, row in bottom_df.iterrows():
+                    leader = row.get("leader", row.get("leader_name", "N/A"))
+                    st.markdown(f"""
+                    <div class="custom-card" style="border-left-color: #e74c3c;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <h4 style="margin: 0;">{row.get('name', row.get('industry', 'N/A'))}</h4>
+                                <p style="margin: 3px 0 0 0; color: #666; font-size: 0.9em;">Leader: {leader}</p>
+                            </div>
+                            <div style="color: #e74c3c; font-weight: bold; font-size: 1.2em;">
+                                {row['change_pct']:.2f}%
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        st.markdown("### Full Ranking Data")
+        st.dataframe(ind_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No industry ranking data available")

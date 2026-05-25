@@ -830,6 +830,103 @@ def list_indexes():
     from data.market_utils import INDEX_CODES
     return {"data": [{"code": v["full"], "name": v["name"], "market": v["market"]} for v in INDEX_CODES.values()]}
 
+
+
+# --- P0: Fund Flow / Northbound / Concept Blocks ---
+
+@app.get("/api/fund-flow/{code}")
+def get_fund_flow(code: str, mode: str = "daily", days: int = 120):
+    """Fund flow for a stock. mode='minute' for intraday, 'daily' for history."""
+    from data.eastmoney_api import fund_flow_minute, fund_flow_daily
+    if mode == "minute":
+        data = fund_flow_minute(code)
+    else:
+        data = fund_flow_daily(code, days)
+    return {"code": code, "mode": mode, "data": data}
+
+
+@app.get("/api/northbound")
+def get_northbound():
+    """Northbound capital flow realtime (北向资金实时)"""
+    from data.ths_api import northbound_realtime
+    df = northbound_realtime()
+    if df.empty:
+        return {"data": [], "summary": {}}
+    records = df.to_dict(orient="records")
+    # Calculate summary
+    last_hgt = 0
+    last_sgt = 0
+    for r in records:
+        h = r.get("hgt_yi")
+        s = r.get("sgt_yi")
+        if h is not None:
+            last_hgt = h
+        if s is not None:
+            last_sgt = s
+    return {
+        "data": records,
+        "summary": {
+            "hgt_latest": last_hgt,
+            "sgt_latest": last_sgt,
+            "total_latest": last_hgt + last_sgt,
+        }
+    }
+
+
+@app.get("/api/concept/{code}")
+def get_concept_blocks(code: str):
+    """Concept/industry/region blocks for a stock (概念板块归属)"""
+    from data.baidu_api import concept_blocks
+    data = concept_blocks(code)
+    return {"code": code, **data}
+
+
+# --- P1: Dragon Tiger / Margin / Reports / Industry ---
+
+@app.get("/api/dragon-tiger")
+def get_dragon_tiger(code: str = "", start_date: str = "", end_date: str = "", limit: int = 50):
+    """Dragon Tiger Board (龙虎榜)"""
+    from data.eastmoney_api import dragon_tiger_board
+    data = dragon_tiger_board(code, start_date, end_date, limit)
+    return {"data": data, "count": len(data)}
+
+
+@app.get("/api/margin/{code}")
+def get_margin_trading(code: str, days: int = 30):
+    """Margin trading details (融资融券)"""
+    from data.eastmoney_api import margin_trading
+    data = margin_trading(code, days)
+    return {"code": code, "data": data}
+
+
+@app.get("/api/reports/{code}")
+def get_research_reports(code: str, limit: int = 20):
+    """Research reports and consensus forecasts (研报+一致预期)"""
+    from data.eastmoney_api import research_reports
+    from data.ths_api import eps_forecast
+    reports = research_reports(code, limit)
+    eps_df = eps_forecast(code)
+    eps_data = []
+    if not eps_df.empty:
+        eps_data = eps_df.to_dict(orient="records")
+    return {"code": code, "reports": reports, "eps_forecast": eps_data}
+
+
+@app.get("/api/industry")
+def get_industry_comparison(top_n: int = 20):
+    """Industry sector ranking (行业板块涨跌排名)"""
+    from data.eastmoney_api import industry_comparison
+    data = industry_comparison(top_n)
+    return data
+
+
+@app.get("/api/block-trade")
+def get_block_trade(code: str = "", limit: int = 30):
+    """Block trades (大宗交易)"""
+    from data.eastmoney_api import block_trade
+    data = block_trade(code, limit)
+    return {"data": data, "count": len(data)}
+
 @app.on_event("shutdown")
 def shutdown():
     fetcher.close()
