@@ -120,11 +120,11 @@ def dragon_tiger_board(code: str = "", start_date: str = "", end_date: str = "",
 
     data = _datacenter_query(
         report_name="RPT_DAILYBILLBOARD_DETAILSNEW",
-        columns="SECURITY_CODE,SECURITY_NAME_ABBR,TRADE_DATE,EXPLAIN,BUY_TOTAL,SELL_TOTAL,NET_BUY",
+        columns="ALL",
         filter_str=filter_str,
         page_size=page_size,
-        sort_columns="TRADE_DATE,NET_BUY",
-        sort_types="-1,-1",
+        sort_columns="TRADE_DATE",
+        sort_types="-1",
     )
     results = []
     for item in data:
@@ -132,10 +132,12 @@ def dragon_tiger_board(code: str = "", start_date: str = "", end_date: str = "",
             "code": item.get("SECURITY_CODE", ""),
             "name": item.get("SECURITY_NAME_ABBR", ""),
             "date": str(item.get("TRADE_DATE", ""))[:10],
-            "reason": item.get("EXPLAIN", ""),
-            "buy_total": item.get("BUY_TOTAL", 0),
-            "sell_total": item.get("SELL_TOTAL", 0),
-            "net_buy": item.get("NET_BUY", 0),
+            "reason": item.get("EXPLANATION", item.get("EXPLAIN", "")),
+            "buy_total": item.get("BILLBOARD_BUY_AMT", 0),
+            "sell_total": item.get("BILLBOARD_SELL_AMT", 0),
+            "net_buy": item.get("BILLBOARD_NET_AMT", 0),
+            "change_pct": item.get("CHANGE_RATE", 0),
+            "turnover": item.get("TURNOVERRATE", 0),
         })
     return results
 
@@ -265,7 +267,7 @@ def block_trade(code: str = "", days: int = 30) -> list:
 
     data = _datacenter_query(
         report_name="RPT_BLOCKTRADE_DET_DETAILS",
-        columns="SECURITY_CODE,SECURITY_NAME_ABBR,TRADE_DATE,DEAL_PRICE,DEAL_VOLUME,DEAL_AMOUNT,PREMIUM_RATIO,BUYER_NAME,SELLER_NAME",
+        columns="ALL",
         filter_str=filter_str,
         page_size=days,
         sort_columns="TRADE_DATE",
