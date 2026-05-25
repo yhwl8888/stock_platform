@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.db
+*.sqlite3
+storage/*.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.log
+
+# Runtime logs
+storage/uvicorn*.txt
+storage/*.db-journal
+test_output.txt
