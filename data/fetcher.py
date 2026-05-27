@@ -68,6 +68,20 @@ def _fetch_kline_raw(code: str, days: int = 250) -> list:
     if market == "bj":
         return []
 
+    result = _do_fetch_kline(market, bare, days)
+    if result:
+        return result
+
+    if bare.startswith("0") or bare.startswith("3"):
+        other = "sh" if market == "sz" else "sz"
+        result = _do_fetch_kline(other, bare, days)
+        if result:
+            return result
+
+    return []
+
+
+def _do_fetch_kline(market: str, bare: str, days: int) -> list:
     url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={market}{bare},day,,,{days},,qfq"
     try:
         resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=10)
