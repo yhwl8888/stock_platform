@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化选股分析平台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="header">
+            <div>
+                <span class="header-title">📊 量化选股分析平台</span>
+                <span class="header-subtitle" style="margin-left:12px">智能四维评分 · ATR风控 · 策略回测</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+                <span id="stockName" style="font-weight:600;color:var(--accent-cyan)">请搜索股票</span>
+            </div>
+        </header>
+
+        <!-- Search -->
+        <div class="search-section glass-card">
+            <div class="search-box" style="position:relative">
+                <input type="text" id="searchInput" class="search-input" placeholder="输入股票代码或名称, 如 600519 或 茅台" autocomplete="off">
+                <button id="searchBtn" class="btn btn-primary">分析</button>
+                <div id="searchResults" class="search-results"></div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+
+            <!-- Left: Chart -->
+            <div class="glass-card chart-section">
+                <div class="indicator-tabs">
+                    <span class="indicator-tab active" data-indicator="ma5">MA5</span>
+                    <span class="indicator-tab active" data-indicator="ma10">MA10</span>
+                    <span class="indicator-tab active" data-indicator="ma20">MA20</span>
+                    <span class="indicator-tab active" data-indicator="ma60">MA60</span>
+                    <span class="indicator-tab" data-indicator="boll_upper">布林带</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;padding:6px 8px">|</span>
+                    <span class="indicator-tab" data-indicator="macd_hist">MACD</span>
+                    <span class="indicator-tab" data-indicator="rsi">RSI</span>
+                    <span class="indicator-tab" data-indicator="kdj_j">KDJ</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;padding:6px 8px">|</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;padding:6px 0">副图:</span>
+                    <span class="indicator-tab active" data-indicator="volume">成交量</span>
+                </div>
+                <div id="kline-chart"></div>
+            </div>
+
+            <!-- Right: Side Panel -->
+            <div class="side-panel">
+
+                <!-- Real-time Quote -->
+                <div class="glass-card fade-in">
+                    <h3 style="font-size:0.95rem;margin-bottom:12px;color:var(--text-secondary)">实时行情</h3>
+                    <div class="quote-card">
+                        <div class="quote-item"><div class="quote-label">最新价</div><div id="q-price">—</div></div>
+                        <div class="quote-item"><div class="quote-label">涨跌幅</div><div id="q-change">—</div></div>
+                        <div class="quote-item"><div class="quote-label">开盘</div><div id="q-open">—</div></div>
+                        <div class="quote-item"><div class="quote-label">最高</div><div id="q-high">—</div></div>
+                        <div class="quote-item"><div class="quote-label">最低</div><div id="q-low">—</div></div>
+                        <div class="quote-item"><div class="quote-label">成交量</div><div id="q-volume">—</div></div>
+                        <div class="quote-item"><div class="quote-label">昨收</div><div id="q-pre-close">—</div></div>
+                    </div>
+                </div>
+
+                <!-- Scoring -->
+                <div class="glass-card fade-in">
+                    <h3 style="font-size:0.95rem;margin-bottom:12px;color:var(--text-secondary)">综合评分</h3>
+                    <div id="scoreCircle" class="score-circle score-neutral">—</div>
+                    <div id="scoreSignal" class="score-label signal-neutral">请选择股票</div>
+                    <div id="dimensionScores" class="dimension-grid">
+                        <div class="dimension-item"><div class="dim-name">趋势</div><div class="dim-score">—</div></div>
+                        <div class="dimension-item"><div class="dim-name">超买超卖</div><div class="dim-score">—</div></div>
+                        <div class="dimension-item"><div class="dim-name">量价分析</div><div class="dim-score">—</div></div>
+                        <div class="dimension-item"><div class="dim-name">运动与位置</div><div class="dim-score">—</div></div>
+                    </div>
+                </div>
+
+                <!-- Tabs: ATR / S-R -->
+                <div class="glass-card fade-in">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="atrTab">ATR 风控</button>
+                        <button class="tab" data-tab="srTab">支撑阻力</button>
+                    </div>
+                    <div id="atrTab" class="tab-content active">
+                        <div class="atr-info">
+                            <div class="atr-box"><div class="atr-label">ATR(14)</div><div id="atrValue" class="atr-value">—</div></div>
+                            <div class="atr-box"><div class="atr-label">止损价(2xATR)</div><div id="atrStop" class="atr-value" style="color:var(--accent-red)">—</div></div>
+                            <div class="atr-box"><div class="atr-label">止盈价(3xATR)</div><div id="atrTake" class="atr-value" style="color:var(--accent-green)">—</div></div>
+                        </div>
+                    </div>
+                    <div id="srTab" class="tab-content">
+                        <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px">近期密集成交区自动检测</div>
+                        <div id="srDisplay"><div style="color:var(--text-muted);font-size:0.85rem">暂无数据</div></div>
+                    </div>
+                </div>
+
+                <!-- Backtest -->
+                <div class="glass-card fade-in">
+                    <h3 style="font-size:0.95rem;margin-bottom:12px;color:var(--text-secondary)">📈 ATR 隔日回测</h3>
+                    <div class="backtest-form">
+                        <div class="form-group">
+                            <label class="form-label">策略选择</label>
+                            <select id="btStrategy" class="form-input">
+                                <option value="ma_crossover">MA5/MA20 金叉</option>
+                                <option value="dual_thrust">Dual Thrust 通道突破</option>
+                                <option value="heikin_ashi">Heikin-Ashi 均值K线</option>
+                                <option value="parabolic_sar">Parabolic SAR 抛物线</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">初始资金(元)</label>
+                            <input type="number" id="btCapital" class="form-input" value="10000" min="1000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">回测天数</label>
+                            <input type="number" id="btDays" class="form-input" value="60" min="10" max="500">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ATR止损倍数</label>
+                            <input type="number" id="btStop" class="form-input" value="2.0" step="0.1" min="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ATR止盈倍数</label>
+                            <input type="number" id="btTake" class="form-input" value="3.0" step="0.1" min="0.5">
+                        </div>
+                    </div>
+                    <button id="backtestBtn" class="btn btn-success" style="width:100%;margin-top:12px">🚀 运行回测</button>
+                    <button id="optimizeBtn" class="btn btn-primary" style="width:100%;margin-top:8px">⚡ 参数优化</button>
+                    <div id="backtestResults" class="backtest-results"></div>
+                    <div id="optimizeResults" class="backtest-results"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.8rem;margin-top:20px">
+            数据来源: 腾讯财经 | 不构成投资建议 | 仅供学习参考
+        </div>
+
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
