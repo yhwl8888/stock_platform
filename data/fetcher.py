@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import numpy as np
 import codecs
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 from functools import lru_cache
 
@@ -64,52 +64,24 @@ def _fetch_kline_raw(code: str, days: int = 250) -> list:
     qcode = _get_qcode(code)
     market = qcode[:2]
     bare = qcode[2:]
-    today = datetime.now()
+
+    if market == "bj":
+        return []
 
     url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={market}{bare},day,,,{days},,qfq"
     try:
         resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=10)
         data = resp.json()
         if data.get("code") != 0:
-            return _fetch_kline_fallback_raw(code, days)
+            return []
 
         kline_data = data.get("data", {})
         stock_data = kline_data.get(f"{market}{bare}", kline_data)
         days_data = stock_data.get("day", [])
 
         if not days_data:
-            return _fetch_kline_fallback_raw(code, days)
+            return []
 
-        result = []
-        for item in days_data:
-            if len(item) >= 6:
-                result.append({
-                    "date": str(item[0]),
-                    "open": float(item[1]),
-                    "close": float(item[2]),
-                    "high": float(item[3]),
-                    "low": float(item[4]),
-                    "volume": float(item[5]),
-                })
-        return result
-    except Exception:
-        return _fetch_kline_fallback_raw(code, days)
-
-
-def _fetch_kline_fallback_raw(code: str, days: int = 250) -> list:
-    qcode = _get_qcode(code)
-    market = qcode[:2]
-    bare = qcode[2:]
-    today = datetime.now()
-    start = today - timedelta(days=days)
-
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/kline/mkline?param={market}{bare},m{market}{bare},,,,{days},,"
-    try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=10)
-        data = resp.json()
-        kline_data = data.get("data", {})
-        market_data = kline_data.get(f"m{market}{bare}", {})
-        days_data = market_data.get("qfqday", market_data.get("day", []))
         result = []
         for item in days_data:
             if len(item) >= 6:

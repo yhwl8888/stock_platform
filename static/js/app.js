@@ -147,6 +147,8 @@ async function loadStock(code) {
                 klineData = kline.data;
                 renderChart();
                 renderATRInfo();
+            } else if (kline && kline.error) {
+                showError('kline-chart', kline.error);
             } else {
                 showError('kline-chart', '暂无K线数据');
             }
