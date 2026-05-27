@@ -1,6 +1,20 @@
 # 量化选股分析平台
 
+> **当前版本：v1.1.0** — 2026-05-27
+
 基于 Flask + ECharts 的 A 股量化分析工具，支持多策略回测、技术指标可视化、ATR 风控和参数优化。
+
+## 更新日志
+
+### v1.1.0 (2026-05-27)
+- **K线数据获取增强**：3次重试 + timeout 10→15s + 详细日志
+- **缓存优化**：移除 lru_cache（会缓存失败结果），改用 TTL 缓存（5分钟，仅缓存成功数据）
+- **页面帮助系统**：header 右上角 ❓ 按钮，点击弹出完整使用说明（评分标准、买入条件、ATR风控、回测指南）
+- **Docker 支持**：新增 Dockerfile，支持 HF Spaces 部署，环境变量 PORT 可配置端口
+- **端口可配置**：通过 `PORT` 环境变量自定义端口，默认 8000
+
+### v1.0.0
+- 初始发布
 
 ## 📖 小白操作指南（3步选股）
 
@@ -201,6 +215,7 @@ python app.py
 stock_quant_platform/
 ├── app.py                 # Flask 主服务
 ├── config.py              # 配置
+├── Dockerfile             # 容器部署（HF Spaces）
 ├── requirements.txt       # Python 依赖
 ├── data/
 │   ├── fetcher.py         # 数据获取（腾讯财经 API）

@@ -4,9 +4,14 @@ import json
 import pandas as pd
 import numpy as np
 import codecs
+import time
+import logging
 from datetime import datetime
 from typing import Optional
 from functools import lru_cache
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q="
 TENCENT_HISTORY_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
@@ -101,37 +106,51 @@ def _fetch_kline_raw(code: str, days: int = 250) -> list:
 
 def _do_fetch_kline(market: str, bare: str, days: int) -> list:
     url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={market}{bare},day,,,{days},,qfq"
-    try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=10)
-        data = resp.json()
-        if data.get("code") != 0:
-            return []
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
+            data = resp.json()
+            if data.get("code") != 0:
+                logger.warning(f"K线API返回非0 code: {data.get('code')}, url={url}")
+                return []
 
-        kline_data = data.get("data", {})
-        stock_data = kline_data.get(f"{market}{bare}", kline_data)
-        days_data = stock_data.get("day", [])
+            kline_data = data.get("data", {})
+            stock_data = kline_data.get(f"{market}{bare}", kline_data)
+            days_data = stock_data.get("day", [])
 
-        if not days_data:
-            return []
+            if not days_data:
+                logger.warning(f"K线数据为空: {market}{bare}, 尝试 {attempt+1}/3")
+                if attempt < 2:
+                    time.sleep(1)
+                    continue
+                return []
 
-        result = []
-        for item in days_data:
-            if len(item) >= 6:
-                result.append({
-                    "date": str(item[0]),
-                    "open": float(item[1]),
-                    "close": float(item[2]),
-                    "high": float(item[3]),
-                    "low": float(item[4]),
-                    "volume": float(item[5]),
-                })
-        return result
-    except Exception:
-        return []
+            result = []
+            for item in days_data:
+                if len(item) >= 6:
+                    result.append({
+                        "date": str(item[0]),
+                        "open": float(item[1]),
+                        "close": float(item[2]),
+                        "high": float(item[3]),
+                        "low": float(item[4]),
+                        "volume": float(item[5]),
+                    })
+            logger.info(f"K线获取成功: {market}{bare}, {len(result)}条")
+            return result
+        except requests.exceptions.Timeout:
+            logger.warning(f"K线请求超时: {market}{bare}, 尝试 {attempt+1}/3")
+            if attempt < 2:
+                time.sleep(2)
+        except Exception as e:
+            logger.error(f"K线获取异常: {market}{bare}, {e}, 尝试 {attempt+1}/3")
+            if attempt < 2:
+                time.sleep(1)
+    return []
 
 
-@lru_cache(maxsize=50)
 def fetch_kline(code: str, days: int = 250) -> list:
+    """K线获取 - 不使用 lru_cache，避免缓存失败结果"""
     return _fetch_kline_raw(code, days)
 
 

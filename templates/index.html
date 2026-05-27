@@ -6,6 +6,87 @@
     <title>量化选股分析平台</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        /* Help Button */
+        .help-btn {
+            position: relative;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            color: #fff;
+            font-size: 18px;
+            font-weight: 900;
+            border: none;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 12px rgba(245,158,11,0.5);
+            animation: helpPulse 2s ease-in-out infinite;
+            transition: transform 0.2s;
+        }
+        .help-btn:hover { transform: scale(1.15); box-shadow: 0 0 20px rgba(245,158,11,0.7); }
+        @keyframes helpPulse {
+            0%, 100% { box-shadow: 0 0 12px rgba(245,158,11,0.5); }
+            50% { box-shadow: 0 0 24px rgba(245,158,11,0.8); }
+        }
+        .help-badge {
+            position: absolute; top: -4px; right: -4px;
+            background: #ef4444; color: #fff;
+            font-size: 9px; font-weight: 700;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid var(--bg-primary);
+        }
+
+        /* Modal Overlay */
+        .help-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            justify-content: center; align-items: center;
+            padding: 20px;
+        }
+        .help-overlay.show { display: flex; }
+        .help-modal {
+            background: linear-gradient(135deg, #1e1e2e 0%, #16162a 100%);
+            border: 1px solid rgba(245,158,11,0.3);
+            border-radius: 16px;
+            max-width: 680px; width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 28px 32px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .help-modal::-webkit-scrollbar { width: 6px; }
+        .help-modal::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.3); border-radius: 3px; }
+        .help-modal h2 { color: #f59e0b; font-size: 1.25rem; margin: 0 0 20px; display: flex; align-items: center; gap: 8px; }
+        .help-modal h3 { color: var(--accent-cyan); font-size: 0.95rem; margin: 20px 0 8px; }
+        .help-modal p, .help-modal li { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; }
+        .help-modal ul { padding-left: 18px; margin: 6px 0; }
+        .help-modal li { margin: 4px 0; }
+        .help-section { margin-bottom: 16px; }
+        .score-table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 0.82rem; }
+        .score-table th { background: rgba(245,158,11,0.15); color: #f59e0b; padding: 6px 10px; text-align: left; border-radius: 4px; }
+        .score-table td { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-secondary); }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; }
+        .tag-buy { background: rgba(16,185,129,0.15); color: #10b981; }
+        .tag-watch { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .tag-sell { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .help-close {
+            position: absolute; top: 16px; right: 20px;
+            background: none; border: none; color: var(--text-muted);
+            font-size: 24px; cursor: pointer;
+        }
+        .help-close:hover { color: #f59e0b; }
+        .help-footer {
+            margin-top: 20px; padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .help-footer span { color: var(--text-muted); font-size: 0.78rem; }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -16,10 +97,93 @@
                 <span class="header-title">📊 量化选股分析平台</span>
                 <span class="header-subtitle" style="margin-left:12px">智能四维评分 · ATR风控 · 策略回测</span>
             </div>
-            <div style="display:flex;align-items:center;gap:12px">
+            <div style="display:flex;align-items:center;gap:16px">
                 <span id="stockName" style="font-weight:600;color:var(--accent-cyan)">请搜索股票</span>
+                <button class="help-btn" onclick="document.getElementById('helpOverlay').classList.add('show')" title="使用帮助">
+                    ?
+                    <span class="help-badge">!</span>
+                </button>
             </div>
         </header>
+
+        <!-- Help Modal -->
+        <div id="helpOverlay" class="help-overlay" onclick="if(event.target===this)this.classList.remove('show')">
+            <div class="help-modal" style="position:relative">
+                <button class="help-close" onclick="document.getElementById('helpOverlay').classList.remove('show')">&times;</button>
+                <h2>📖 使用帮助</h2>
+
+                <div class="help-section">
+                    <h3>🔍 如何使用</h3>
+                    <ul>
+                        <li>输入股票代码（如 <b>600519</b>）或名称（如 <b>茅台</b>），点击搜索</li>
+                        <li>从下拉列表选择股票，系统自动加载 K 线图、实时行情和四维评分</li>
+                        <li>可切换指标（MA/布林带/MACD/RSI/KDJ）查看不同技术面</li>
+                        <li>右侧面板显示 ATR 风控、支撑阻力位和回测功能</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>📊 四维评分体系（满分 100）</h3>
+                    <table class="score-table">
+                        <tr><th>维度</th><th>满分</th><th>评估内容</th></tr>
+                        <tr><td>趋势</td><td>30</td><td>MA 多头排列、EMA 趋势、ADX 强度</td></tr>
+                        <tr><td>超买超卖</td><td>30</td><td>RSI、KDJ、布林带位置</td></tr>
+                        <tr><td>量价分析</td><td>25</td><td>量比、放量/缩量、量价配合</td></tr>
+                        <tr><td>运动与位置</td><td>15</td><td>价格相对高低位、波动率</td></tr>
+                    </table>
+                </div>
+
+                <div class="help-section">
+                    <h3>🚦 信号等级</h3>
+                    <table class="score-table">
+                        <tr><th>总分</th><th>信号</th><th>含义</th></tr>
+                        <tr><td>≥ 75</td><td><span class="tag tag-buy">强烈买入</span></td><td>四维共振，多指标一致看多</td></tr>
+                        <tr><td>60 ~ 74</td><td><span class="tag tag-buy">买入</span></td><td>多数指标偏多，可考虑建仓</td></tr>
+                        <tr><td>40 ~ 59</td><td><span class="tag tag-watch">观望</span></td><td>信号不明确，等待确认</td></tr>
+                        <tr><td>< 40</td><td><span class="tag tag-sell">卖出</span></td><td>多数指标偏空，注意风险</td></tr>
+                    </table>
+                </div>
+
+                <div class="help-section">
+                    <h3>✅ 买入三条件</h3>
+                    <ul>
+                        <li><b>总评分 ≥ 60</b> — 综合评级为"买入"以上</li>
+                        <li><b>趋势分 ≥ 20</b> — 确认上升趋势成立</li>
+                        <li><b>量价分 ≥ 16</b> — 有资金推动，非空涨</li>
+                    </ul>
+                    <p style="margin-top:6px;color:var(--text-muted)">三个条件 <b>同时满足</b> 才触发买入信号，缺一不可</p>
+                </div>
+
+                <div class="help-section">
+                    <h3>🛡️ ATR 风控</h3>
+                    <ul>
+                        <li><b>ATR(14)</b>：14日平均真实波幅，衡量波动性</li>
+                        <li><b>止损 = 最新价 − 2×ATR</b>：跌破此价建议止损</li>
+                        <li><b>止盈 = 最新价 + 3×ATR</b>：到达此价可考虑止盈</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>📈 回测说明</h3>
+                    <ul>
+                        <li>选择策略（金叉/EMA/Dual Thrust/Heikin-Ashi/SAR/流星线）</li>
+                        <li>设置初始资金、回测天数、ATR 止损/止盈倍数</li>
+                        <li>点击"运行回测"查看收益率、胜率、最大回撤等指标</li>
+                        <li>"参数优化"自动扫描最优 ATR 止损/止盈组合</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>⚠️ 免责声明</h3>
+                    <p>本平台仅供学习研究，数据来自腾讯财经，不构成投资建议。股市有风险，投资需谨慎。</p>
+                </div>
+
+                <div class="help-footer">
+                    <span>数据来源: 腾讯财经</span>
+                    <span>按 ESC 或点击背景关闭</span>
+                </div>
+            </div>
+        </div>
 
         <!-- Search -->
         <div class="search-section glass-card">
@@ -149,6 +313,12 @@
 
     </div>
 
-    <script src="/static/js/app.js?v=5"></script>
+    <script>
+        // ESC to close help modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') document.getElementById('helpOverlay').classList.remove('show');
+        });
+    </script>
+    <script src="/static/js/app.js?v=6"></script>
 </body>
 </html>
