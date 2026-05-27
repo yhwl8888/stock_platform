@@ -35,6 +35,50 @@ PARAM_GRID = {
         "wick_multiple": {"values": [1.5, 2.0, 3.0], "label": "影线倍数"},
         "shooting_hold": {"values": [3, 5, 7], "label": "持有天数"},
     },
+    "multi_factor_resonance": {
+        "ma_short": {"values": [3, 5, 8], "label": "短周期MA"},
+        "ma_mid": {"values": [15, 20, 30], "label": "中周期MA"},
+        "ma_long": {"values": [50, 60, 80], "label": "长周期MA"},
+        "volume_ratio": {"values": [1.2, 1.5, 1.8], "label": "量比"},
+        "hold_days": {"values": [7, 10, 15], "label": "持有天数"},
+        "atr_stop_mult": {"values": [1.5, 2.0, 2.5], "label": "ATR止损倍数"},
+        "atr_take_mult": {"values": [2.5, 3.0, 3.5], "label": "ATR止盈倍数"},
+    },
+    "macd_rsi_volume": {
+        "rsi_period": {"values": [9, 14, 21], "label": "RSI周期"},
+        "rsi_low": {"values": [25, 30, 35], "label": "RSI超卖阈值"},
+        "rsi_high": {"values": [65, 70, 75], "label": "RSI超买阈值"},
+        "volume_ratio": {"values": [1.2, 1.5, 1.8], "label": "量比"},
+        "hold_days": {"values": [5, 8, 12], "label": "持有天数"},
+        "atr_stop_mult": {"values": [1.5, 2.0, 2.5], "label": "ATR止损倍数"},
+        "atr_take_mult": {"values": [2.0, 3.0, 4.0], "label": "ATR止盈倍数"},
+    },
+    "boll_rsi_mean_reversion": {
+        "boll_period": {"values": [15, 20, 25], "label": "布林带周期"},
+        "boll_std": {"values": [1.5, 2.0, 2.5], "label": "布林带标准差"},
+        "rsi_period": {"values": [9, 14, 21], "label": "RSI周期"},
+        "rsi_low": {"values": [20, 25, 30], "label": "RSI超卖阈值"},
+        "rsi_high": {"values": [70, 75, 80], "label": "RSI超买阈值"},
+        "hold_days": {"values": [4, 6, 8], "label": "持有天数"},
+        "atr_stop_mult": {"values": [1.5, 2.0], "label": "ATR止损倍数"},
+        "atr_take_mult": {"values": [2.0, 3.0], "label": "ATR止盈倍数"},
+    },
+    "turtle_trading": {
+        "entry_period": {"values": [15, 20, 25, 30], "label": "入场突破周期"},
+        "exit_period": {"values": [8, 10, 12, 15], "label": "出场跌破周期"},
+        "atr_stop_mult": {"values": [1.5, 2.0, 2.5, 3.0], "label": "ATR止损倍数"},
+        "atr_take_mult": {"values": [2.5, 3.0, 3.5, 4.0], "label": "ATR止盈倍数"},
+    },
+    "rsi_reversal_volume": {
+        "rsi_period": {"values": [7, 9, 14], "label": "RSI周期"},
+        "rsi_low": {"values": [15, 20, 25], "label": "RSI超卖阈值"},
+        "rsi_high": {"values": [65, 70, 75], "label": "RSI超买阈值"},
+        "volume_ratio": {"values": [1.5, 1.8, 2.2], "label": "量比"},
+        "take_profit_pct": {"values": [0.04, 0.06, 0.08], "label": "止盈比例"},
+        "hold_days": {"values": [3, 5, 7], "label": "持有天数"},
+        "atr_stop_mult": {"values": [1.5, 2.0], "label": "ATR止损倍数"},
+        "atr_take_mult": {"values": [2.0, 2.5], "label": "ATR止盈倍数"},
+    },
 }
 
 
@@ -42,7 +86,7 @@ def get_param_grid(strategy_name: str):
     return PARAM_GRID.get(strategy_name, {})
 
 
-def optimize(close, high, low, open=None,
+def optimize(close, high, low, open=None, volume=None,
              initial_capital=10000,
              strategy_name="ma_crossover",
              trade_days=60,
@@ -74,6 +118,8 @@ def optimize(close, high, low, open=None,
         kwargs["low"] = low
         if open is not None:
             kwargs["open"] = open
+        if volume is not None:
+            kwargs["volume"] = volume
 
         atr_stop = kwargs.get("atr_stop_mult", 2.0)
         atr_take = kwargs.get("atr_take_mult", 3.0)
