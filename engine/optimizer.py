@@ -109,25 +109,26 @@ def optimize(close, high, low, open=None, volume=None,
 
     count = 0
     for combo in itertools.product(*param_values):
-        kwargs = {param_names[i]: combo[i] for i in range(len(param_names))}
-        kwargs["initial_capital"] = initial_capital
-        kwargs["trade_days"] = trade_days
-        kwargs["strategy_name"] = strategy_name
-        kwargs["close"] = close
-        kwargs["high"] = high
-        kwargs["low"] = low
-        if open is not None:
-            kwargs["open"] = open
-        if volume is not None:
-            kwargs["volume"] = volume
-
-        atr_stop = kwargs.get("atr_stop_mult", 2.0)
-        atr_take = kwargs.get("atr_take_mult", 3.0)
-        kwargs["atr_stop_mult"] = atr_stop
-        kwargs["atr_take_mult"] = atr_take
+        # 只把策略参数和标准的回测参数分开
+        strategy_params = {param_names[i]: combo[i] for i in range(len(param_names))}
+        
+        atr_stop = strategy_params.pop("atr_stop_mult", 2.0)
+        atr_take = strategy_params.pop("atr_take_mult", 3.0)
 
         try:
-            result = run_backtest(**kwargs)
+            result = run_backtest(
+                close=close,
+                high=high,
+                low=low,
+                open=open,
+                volume=volume,
+                initial_capital=initial_capital,
+                atr_stop_mult=atr_stop,
+                atr_take_mult=atr_take,
+                trade_days=trade_days,
+                strategy_name=strategy_name,
+                **strategy_params
+            )
         except Exception:
             count += 1
             continue

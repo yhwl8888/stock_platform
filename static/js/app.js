@@ -515,7 +515,18 @@ async function runBacktest() {
                 days: Math.max(tradeDays + 100, 250),
             }),
         });
-        const data = await resp.json();
+        
+        if (!resp.ok) {
+            throw new Error(`服务器错误: ${resp.status}`);
+        }
+        
+        const text = await resp.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`响应解析失败: ${text.substring(0, 100)}`);
+        }
 
         if (data.error) {
             document.getElementById('backtestResults').innerHTML = `<div class="error-box">${data.error}</div>`;
@@ -594,7 +605,18 @@ async function runOptimize() {
                 days: Math.max(tradeDays + 100, 250),
             }),
         });
-        const data = await resp.json();
+        
+        if (!resp.ok) {
+            throw new Error(`服务器错误: ${resp.status}`);
+        }
+        
+        const text = await resp.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`响应解析失败: ${text.substring(0, 100)}`);
+        }
 
         if (data.error) {
             document.getElementById('optimizeResults').innerHTML = `<div class="error-box">${data.error}</div>`;

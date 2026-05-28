@@ -45,7 +45,10 @@ def run_backtest(close: list, high: list, low: list, open: list = None, volume: 
 
         current_atr = atr_vals[i]
 
-        sig = strategy["signal"](close, high, low, open_arr, i, position, volume=volume_arr, **params)
+        # 把 volume 放入 params 字典中传递给策略
+        params_with_volume = dict(params)
+        params_with_volume["volume"] = volume_arr
+        sig = strategy["signal"](close, high, low, open_arr, i, position, **params_with_volume)
         exit_sig = strategy["exit"](close, high, low, i, entry_price, position, entry_bar, **params)
 
         if exit_sig != 0 and position != 0:
