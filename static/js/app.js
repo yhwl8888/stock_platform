@@ -6,11 +6,30 @@ let indicatorsData = null;
 let isLoading = false;
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     chart = echarts.init(document.getElementById('kline-chart'), 'dark');
+    await loadStrategies();
     setupEventListeners();
     handleResize();
 });
+
+async function loadStrategies() {
+    try {
+        const resp = await fetch('/api/strategies');
+        const data = await resp.json();
+        const select = document.getElementById('btStrategy');
+        select.innerHTML = '';
+        for (const [key, strategy] of Object.entries(data)) {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = strategy.name;
+            option.title = strategy.desc;
+            select.appendChild(option);
+        }
+    } catch (e) {
+        console.error('加载策略失败:', e);
+    }
+}
 
 function setupEventListeners() {
     document.getElementById('searchBtn').addEventListener('click', async () => {
